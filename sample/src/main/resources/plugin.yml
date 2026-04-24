@@ -1,0 +1,6 @@
+name: GroundsPushSample
+version: 0.1.0
+main: gg.grounds.sample.SamplePlugin
+api-version: "1.21"
+description: "Trivial sample plugin demonstrating grounds-push pipeline"
+authors: ["grounds"]

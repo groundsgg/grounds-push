@@ -1,0 +1,4 @@
+name: grounds-push-sample
+type: plugin-paper
+baseImage: paper
+jar: build/libs/sample-0.1.0-SNAPSHOT.jar

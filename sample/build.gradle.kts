@@ -12,4 +12,19 @@ java {
     }
 }
 
-// grounds.yaml will be added in Chapter 7
+dependencies {
+    // compileOnly — Paper provides these at runtime.
+    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+}
+
+tasks.named<Jar>("jar") {
+    // Keep the JAR small; just the sample class.
+    manifest {
+        attributes["Implementation-Title"] = "grounds-push-sample"
+    }
+}
+
+groundsPush {
+    // For local testing only — real users set GROUNDS_API_URL or configure ~/.config/grounds/credentials.json.
+    apiUrl.set(providers.environmentVariable("GROUNDS_API_URL").orElse("https://platform.grnds.io"))
+}

@@ -15,6 +15,8 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         mavenCentral()
+        // Required by :sample — Paper API is distributed from their own Maven repo.
+        maven { url = uri("https://repo.papermc.io/repository/maven-public/") }
     }
 }
 
