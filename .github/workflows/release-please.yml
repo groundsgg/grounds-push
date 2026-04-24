@@ -2,6 +2,13 @@ name: release-please
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_publish:
+        description: "Force publish the current main to GitHub Packages (used for bootstrapping the first release that release-please's first-tag edge case misses)"
+        required: false
+        default: "false"
+        type: string
 
 permissions:
   contents: write
@@ -10,6 +17,7 @@ permissions:
 
 jobs:
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -24,7 +32,7 @@ jobs:
 
   publish:
     needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || github.event.inputs.force_publish == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
