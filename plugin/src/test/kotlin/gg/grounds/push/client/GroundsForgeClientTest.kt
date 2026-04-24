@@ -1,0 +1,164 @@
+package gg.grounds.push.client
+
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.io.TempDir
+import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+class GroundsForgeClientTest {
+    private lateinit var server: MockWebServer
+    private lateinit var client: GroundsForgeClient
+
+    @BeforeEach
+    fun setup() {
+        server = MockWebServer()
+        server.start()
+        client = GroundsForgeClient(server.url("/").toString().removeSuffix("/"), "test-token")
+    }
+
+    @AfterEach
+    fun teardown() { server.shutdown() }
+
+    private fun fakeJar(tmp: File): File {
+        val f = File(tmp, "app.jar")
+        // PK\x03\x04 header makes it pass server-side ZIP magic check (not enforced here)
+        f.writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04) + ByteArray(100))
+        return f
+    }
+
+    @Test
+    fun `createPush 202 parses response`(@TempDir tmp: File) {
+        server.enqueue(MockResponse().setResponseCode(202).setBody(
+            """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""
+        ))
+        val r = client.createPush("""{"name":"x","type":"gamemode","baseImage":"minestom"}""", "dev", fakeJar(tmp))
+        assertEquals("p1", r.pushId)
+        assertFalse(r.reused)
+
+        val recorded = server.takeRequest()
+        assertEquals("POST", recorded.method)
+        assertEquals("/v1/pushes", recorded.path)
+        assertEquals("Bearer test-token", recorded.getHeader("Authorization"))
+        assertTrue(recorded.getHeader("Content-Type")!!.startsWith("multipart/form-data"))
+    }
+
+    @Test
+    fun `createPush 200 idempotent hit`(@TempDir tmp: File) {
+        server.enqueue(MockResponse().setResponseCode(200).setBody(
+            """{"pushId":"p1","status":"build_succeeded","reused":true,"logsUrl":null}"""
+        ))
+        val r = client.createPush("{}", "dev", fakeJar(tmp))
+        assertTrue(r.reused)
+    }
+
+    @Test
+    fun `createPush 400 surfaces ApiException with error body`(@TempDir tmp: File) {
+        server.enqueue(MockResponse().setResponseCode(400).setBody(
+            """{"error":"invalid_baseImage","message":"unknown baseImage 'bungeecord'","allowed":["paper","velocity"]}"""
+        ))
+        val e = assertThrows<GroundsForgeClient.ApiException> {
+            client.createPush("{}", "dev", fakeJar(tmp))
+        }
+        assertEquals(400, e.statusCode)
+        assertEquals("invalid_baseImage", e.errorBody?.error)
+        assertNotNull(e.errorBody?.allowed)
+    }
+
+    @Test
+    fun `createPush 413 jar too large`(@TempDir tmp: File) {
+        server.enqueue(MockResponse().setResponseCode(413).setBody(
+            """{"error":"jar_too_large","maxBytes":52428800}"""
+        ))
+        val e = assertThrows<GroundsForgeClient.ApiException> {
+            client.createPush("{}", "dev", fakeJar(tmp))
+        }
+        assertEquals(413, e.statusCode)
+    }
+
+    @Test
+    fun `getPush 200 parses build detail`() {
+        server.enqueue(MockResponse().setBody(
+            """{"id":"p1","status":"building","target":"dev","baseImage":"paper","imageTag":null,"failureReason":null,"createdAt":"2026-04-24T10:00:00Z","updatedAt":"2026-04-24T10:00:01Z","build":{"id":"b1","status":"running","kanikoJobName":"build-abc","startedAt":"2026-04-24T10:00:01Z","finishedAt":null}}"""
+        ))
+        val r = client.getPush("p1")
+        assertEquals("building", r.status)
+        assertEquals("b1", r.build?.id)
+    }
+
+    @Test
+    fun `getPush 404 throws`() {
+        server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":"not_found"}"""))
+        val e = assertThrows<GroundsForgeClient.ApiException> { client.getPush("p1") }
+        assertEquals(404, e.statusCode)
+    }
+
+    @Test
+    fun `streamLogs receives status and done events`() {
+        val sseBody = "event: status\ndata: {\"status\":\"building\"}\n\n" +
+            "event: log\ndata: {\"ts\":\"2026-04-24T10:00:00Z\",\"line\":\"INFO: Executing Kaniko build\"}\n\n" +
+            "event: status\ndata: {\"status\":\"build_succeeded\",\"imageTag\":\"zot/x:abc\"}\n\n" +
+            "event: done\ndata: {}\n\n"
+        server.enqueue(MockResponse()
+            .setHeader("Content-Type", "text/event-stream")
+            .setBody(sseBody)
+        )
+
+        val statuses = mutableListOf<String>()
+        val imageTags = mutableListOf<String?>()
+        val logs = mutableListOf<String>()
+        val doneLatch = CountDownLatch(1)
+        val closedLatch = CountDownLatch(1)
+        val failures = mutableListOf<String>()
+
+        client.streamLogs("p1", object : PushSseListener {
+            override fun onStatus(status: String, imageTag: String?, failureReason: String?) {
+                statuses += status; imageTags += imageTag
+            }
+            override fun onLog(ts: String, line: String) { logs += line }
+            override fun onWarning(reason: String) {}
+            override fun onDone() { doneLatch.countDown() }
+            override fun onError(reason: String) {}
+            override fun onStreamClosed(normal: Boolean) {
+                if (!normal) failures += "stream closed abnormally"
+                closedLatch.countDown()
+            }
+        })
+
+        assertTrue(doneLatch.await(5, TimeUnit.SECONDS), "done event not received; failures=$failures")
+        assertTrue(closedLatch.await(5, TimeUnit.SECONDS), "stream not closed")
+        assertEquals(listOf("building", "build_succeeded"), statuses)
+        assertEquals(listOf("INFO: Executing Kaniko build"), logs)
+    }
+
+    @Test
+    fun `streamLogs handles error event`() {
+        val sseBody = "event: error\ndata: {\"reason\":\"token_expired\"}\n\n"
+        server.enqueue(MockResponse()
+            .setHeader("Content-Type", "text/event-stream")
+            .setBody(sseBody)
+        )
+
+        val errorLatch = CountDownLatch(1)
+        val errors = mutableListOf<String>()
+        client.streamLogs("p1", object : PushSseListener {
+            override fun onStatus(s: String, i: String?, f: String?) {}
+            override fun onLog(ts: String, line: String) {}
+            override fun onWarning(reason: String) {}
+            override fun onDone() {}
+            override fun onError(reason: String) { errors += reason; errorLatch.countDown() }
+            override fun onStreamClosed(normal: Boolean) {}
+        })
+        assertTrue(errorLatch.await(5, TimeUnit.SECONDS))
+        assertEquals("token_expired", errors[0])
+    }
+}
