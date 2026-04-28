@@ -3,6 +3,7 @@ package gg.grounds.push
 import gg.grounds.push.tasks.GroundsPromoteTask
 import gg.grounds.push.tasks.GroundsPushRetryTask
 import gg.grounds.push.tasks.GroundsPushTask
+import gg.grounds.push.tasks.GroundsTestLocalTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.jvm.tasks.Jar
@@ -39,8 +40,23 @@ class GroundsPushPlugin : Plugin<Project> {
             t.description = "[NOT YET AVAILABLE] Promote a successful push to another target"
         }
 
+        // Local-test task. Runs Paper or Velocity locally with this plugin
+        // pre-installed — the offline equivalent of `grounds push --target=dev`,
+        // for inner-loop iteration without spending Grounds infra quota.
+        val testLocalTask = target.tasks.register(
+            "groundsTestLocal",
+            GroundsTestLocalTask::class.java,
+        ) { t ->
+            t.group = "grounds"
+            t.description = "Run Paper/Velocity locally with this plugin loaded (offline)"
+            t.manifestFile.set(ext.manifestFile)
+            t.jarFile.set(ext.jarFile)
+            t.paperVersion.set(ext.paperVersion)
+            t.velocityVersion.set(ext.velocityVersion)
+        }
+
         // JAR auto-detection at afterEvaluate so the user's `shadowJar`/`jar` task
-        // exists by then.
+        // exists by then. Both push and testLocal benefit from the same wiring.
         target.afterEvaluate { p ->
             if (!ext.jarFile.isPresent) {
                 val autoJarTask = listOf(
@@ -52,6 +68,10 @@ class GroundsPushPlugin : Plugin<Project> {
                 if (autoJarTask != null) {
                     pushTask.configure { t -> t.autoDetectedJarFile.set(autoJarTask.archiveFile) }
                     pushTask.configure { t -> t.dependsOn(autoJarTask) }
+                    testLocalTask.configure { t ->
+                        t.jarFile.set(autoJarTask.archiveFile)
+                        t.dependsOn(autoJarTask)
+                    }
                 }
             }
         }

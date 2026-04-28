@@ -18,6 +18,11 @@ abstract class GroundsPushExtension @Inject constructor(objects: ObjectFactory) 
     abstract val connectTimeoutSeconds: Property<Int>
     abstract val failOnWhitelistError: Property<Boolean>
 
+    /** `groundsTestLocal` override — Paper version. Defaults to 1.21.4 (matches forge baseImage). */
+    abstract val paperVersion: Property<String>
+    /** `groundsTestLocal` override — Velocity version. Defaults to 3.4.0-SNAPSHOT. */
+    abstract val velocityVersion: Property<String>
+
     init {
         timeoutMinutes.convention(5)
         connectTimeoutSeconds.convention(20)
