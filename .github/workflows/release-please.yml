@@ -18,7 +18,7 @@ permissions:
 jobs:
   release-please:
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -33,7 +33,7 @@ jobs:
   publish:
     needs: release-please
     if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || github.event.inputs.force_publish == 'true') }}
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-java@v4
