@@ -194,7 +194,12 @@ abstract class GroundsPushTask : DefaultTask() {
     }
 
     private fun humanSize(bytes: Long): String {
-        val mb = bytes.toDouble() / (1024 * 1024)
-        return if (mb < 1) "${bytes / 1024} KB" else String.format("%.1f MB", mb)
+        val kb = bytes.toDouble() / 1024
+        val mb = kb / 1024
+        return when {
+            kb < 1 -> "$bytes B"
+            mb < 1 -> String.format("%.1f KB", kb)
+            else -> String.format("%.1f MB", mb)
+        }
     }
 }
