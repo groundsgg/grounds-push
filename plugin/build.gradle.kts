@@ -11,6 +11,9 @@ group = "gg.grounds"
 // has surprising lazy semantics that quietly fall back to the
 // "0.1.0-dev" default in CI even when the file is present.
 version = run {
+    val manifestDebug = rootProject.file(".release-please-manifest.json")
+    println("[build.gradle.kts] manifest exists=${manifestDebug.exists()} path=${manifestDebug.absolutePath}")
+    if (manifestDebug.exists()) println("[build.gradle.kts] manifest content=${manifestDebug.readText()}")
     val manifest = rootProject.file(".release-please-manifest.json")
     if (manifest.exists()) {
         val text = manifest.readText()
