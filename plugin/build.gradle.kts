@@ -6,15 +6,18 @@ plugins {
 }
 
 group = "gg.grounds"
-// Version is driven by release-please's manifest file. For local dev, read
-// from .release-please-manifest.json at the root, else default to "0.1.0-dev".
-version = providers.fileContents(rootProject.layout.projectDirectory.file(".release-please-manifest.json"))
-    .asText
-    .map { text ->
-        val m = Regex("\".\":\\s*\"([^\"]+)\"").find(text)
+// Version is driven by release-please's manifest file. Read it
+// directly with File I/O at config time — `providers.fileContents`
+// has surprising lazy semantics that quietly fall back to the
+// "0.1.0-dev" default in CI even when the file is present.
+version = run {
+    val manifest = rootProject.file(".release-please-manifest.json")
+    if (manifest.exists()) {
+        val text = manifest.readText()
+        val m = Regex("\"\\.\":\\s*\"([^\"]+)\"").find(text)
         m?.groupValues?.get(1) ?: "0.1.0-dev"
-    }
-    .getOrElse("0.1.0-dev")
+    } else "0.1.0-dev"
+}
 
 java {
     toolchain {
