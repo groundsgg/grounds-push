@@ -3,7 +3,9 @@ package gg.grounds.push.tasks
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.TaskAction
+import org.gradle.work.DisableCachingByDefault
 
+@DisableCachingByDefault(because = "Promotion is a remote operation and has no reproducible local outputs.")
 abstract class GroundsPromoteTask : DefaultTask() {
     @TaskAction
     fun run() {

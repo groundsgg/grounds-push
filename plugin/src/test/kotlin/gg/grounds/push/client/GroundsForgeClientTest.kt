@@ -151,7 +151,7 @@ class GroundsForgeClientTest {
         val errorLatch = CountDownLatch(1)
         val errors = mutableListOf<String>()
         client.streamLogs("p1", object : PushSseListener {
-            override fun onStatus(s: String, i: String?, f: String?) {}
+            override fun onStatus(status: String, imageTag: String?, failureReason: String?) {}
             override fun onLog(ts: String, line: String) {}
             override fun onWarning(reason: String) {}
             override fun onDone() {}

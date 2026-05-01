@@ -9,8 +9,10 @@ import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.options.Option
+import org.gradle.work.DisableCachingByDefault
 import java.time.Duration
 
+@DisableCachingByDefault(because = "Retries a remote grounds-forge push and has no reproducible local outputs.")
 abstract class GroundsPushRetryTask : DefaultTask() {
     @get:Input @get:Optional abstract val apiUrl: Property<String>
     @get:Input abstract val timeoutMinutes: Property<Int>

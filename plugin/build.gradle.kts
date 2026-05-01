@@ -1,28 +1,13 @@
 plugins {
     `java-gradle-plugin`
     `maven-publish`
-    kotlin("jvm") version "1.9.25"
-    kotlin("plugin.serialization") version "1.9.25"
+    kotlin("jvm") version "2.3.21"
+    kotlin("plugin.serialization") version "2.3.21"
 }
 
 group = "gg.grounds"
-// Version is driven by release-please's manifest file. Read it
-// directly with File I/O at config time — `providers.fileContents`
-// has surprising lazy semantics that quietly fall back to the
-// "0.1.0-dev" default in CI even when the file is present.
-version = run {
-    // The plugin is registered as `includeBuild("plugin")` in the
-    // outer settings.gradle.kts, which makes it a *composite build*
-    // — its own `rootProject` is the plugin dir, NOT the outer
-    // grounds-push repo where release-please writes the manifest.
-    // Resolve the manifest one level up via the project dir directly.
-    val manifest = rootProject.layout.projectDirectory.dir("..").file(".release-please-manifest.json").asFile
-    if (manifest.exists()) {
-        val text = manifest.readText()
-        val m = Regex("\"\\.\":\\s*\"([^\"]+)\"").find(text)
-        m?.groupValues?.get(1) ?: "0.1.0-dev"
-    } else "0.1.0-dev"
-}
+val versionOverride = project.findProperty("versionOverride") as? String
+version = versionOverride ?: "dev"
 
 java {
     toolchain {
@@ -38,6 +23,10 @@ kotlin {
     jvmToolchain(21)
 }
 
+repositories {
+    mavenCentral()
+}
+
 gradlePlugin {
     plugins {
         create("groundsPush") {
@@ -50,15 +39,15 @@ gradlePlugin {
 }
 
 dependencies {
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
-    implementation("org.yaml:snakeyaml:2.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("com.squareup.okhttp3:okhttp:5.3.2")
+    implementation("com.squareup.okhttp3:okhttp-sse:5.3.2")
+    implementation("org.yaml:snakeyaml:2.6")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
 
     testImplementation(kotlin("test"))
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
-    testImplementation("io.mockk:mockk:1.13.10")
-    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.0.3")
+    testImplementation("io.mockk:mockk:1.14.9")
+    testImplementation("com.squareup.okhttp3:mockwebserver:5.3.2")
     testImplementation(gradleTestKit())
 }
 
