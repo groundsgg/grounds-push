@@ -14,15 +14,17 @@ import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
 import org.gradle.api.tasks.options.Option
+import org.gradle.work.DisableCachingByDefault
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
+@DisableCachingByDefault(because = "Pushes a plugin artifact to grounds-forge and streams remote build logs.")
 abstract class GroundsPushTask : DefaultTask() {
     @get:Input @get:Optional abstract val apiUrl: Property<String>
-    @get:InputFile abstract val manifestFile: RegularFileProperty
-    @get:InputFile abstract val jarFile: RegularFileProperty
+    @get:InputFile @get:PathSensitive(PathSensitivity.RELATIVE) abstract val manifestFile: RegularFileProperty
+    @get:InputFile @get:PathSensitive(PathSensitivity.RELATIVE) abstract val jarFile: RegularFileProperty
     @get:Input @get:Optional abstract val target: Property<String>
     @get:Input abstract val timeoutMinutes: Property<Int>
     @get:Input abstract val connectTimeoutSeconds: Property<Int>

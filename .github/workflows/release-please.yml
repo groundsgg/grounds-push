@@ -1,48 +1,26 @@
-name: release-please
+name: Release Please
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      force_publish:
-        description: "Force publish the current main to GitHub Packages (used for bootstrapping the first release that release-please's first-tag edge case misses)"
-        required: false
-        default: "false"
-        type: string
 
 permissions:
   contents: write
+  issues: write
   pull-requests: write
-  packages: write
 
 jobs:
   release-please:
-    if: github.event_name == 'push'
+    name: Create Release
     runs-on: self-hosted
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Release Please
+        uses: googleapis/release-please-action@v5
         with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-
-  publish:
-    needs: release-please
-    if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || github.event.inputs.force_publish == 'true') }}
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
-      - name: Publish plugin to GitHub Packages
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew :plugin:publishAllPublicationsToGitHubPackagesRepository --no-daemon --stacktrace

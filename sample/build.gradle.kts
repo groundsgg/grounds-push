@@ -12,6 +12,12 @@ java {
     }
 }
 
+repositories {
+    mavenCentral()
+    // Required by Paper API.
+    maven { url = uri("https://repo.papermc.io/repository/maven-public/") }
+}
+
 dependencies {
     // compileOnly — Paper provides these at runtime.
     compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")

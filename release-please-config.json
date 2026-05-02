@@ -3,6 +3,7 @@
   "packages": {
     ".": {
       "release-type": "simple",
+      "component": "grounds-push",
       "package-name": "grounds-push",
       "changelog-path": "CHANGELOG.md",
       "include-v-in-tag": true,
@@ -13,7 +14,6 @@
       "extra-files": []
     }
   },
-  "separate-pull-requests": false,
   "changelog-sections": [
     { "type": "feat", "section": "Features" },
     { "type": "fix", "section": "Bug Fixes" },

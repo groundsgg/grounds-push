@@ -67,7 +67,7 @@ class GroundsForgeClient(
             .post(body)
             .build()
         httpClient.newCall(req).execute().use { resp ->
-            val raw = resp.body?.string() ?: ""
+            val raw = resp.body.string()
             when (resp.code) {
                 200, 202 -> return json.decodeFromString(CreatePushResponse.serializer(), raw)
                 else -> throw toApiException(resp.code, raw)
@@ -82,7 +82,7 @@ class GroundsForgeClient(
             .get()
             .build()
         httpClient.newCall(req).execute().use { resp ->
-            val raw = resp.body?.string() ?: ""
+            val raw = resp.body.string()
             if (resp.code == 200) return json.decodeFromString(PushDetail.serializer(), raw)
             throw toApiException(resp.code, raw)
         }
@@ -95,7 +95,7 @@ class GroundsForgeClient(
             .post(ByteArray(0).toRequestBody(null))
             .build()
         httpClient.newCall(req).execute().use { resp ->
-            val raw = resp.body?.string() ?: ""
+            val raw = resp.body.string()
             if (resp.code == 202) return json.decodeFromString(CreatePushResponse.serializer(), raw)
             throw toApiException(resp.code, raw)
         }
@@ -121,7 +121,7 @@ class GroundsForgeClient(
             .build()
 
         return EventSources.createFactory(sseClient).newEventSource(req, object : EventSourceListener() {
-            override fun onEvent(es: EventSource, id: String?, type: String?, data: String) {
+            override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
                 try {
                     when (type) {
                         "status" -> {
@@ -154,9 +154,9 @@ class GroundsForgeClient(
                 }
             }
 
-            override fun onClosed(es: EventSource) { listener.onStreamClosed(normal = true) }
+            override fun onClosed(eventSource: EventSource) { listener.onStreamClosed(normal = true) }
 
-            override fun onFailure(es: EventSource, t: Throwable?, r: okhttp3.Response?) {
+            override fun onFailure(eventSource: EventSource, t: Throwable?, response: okhttp3.Response?) {
                 listener.onStreamClosed(normal = false)
             }
         })
