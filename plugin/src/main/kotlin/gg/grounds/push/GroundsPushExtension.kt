@@ -6,7 +6,7 @@ import org.gradle.api.provider.Property
 import javax.inject.Inject
 
 abstract class GroundsPushExtension @Inject constructor(objects: ObjectFactory) {
-    /** grounds-forge API URL. Defaults to the credentials file's apiUrl, or https://forge.grnds.io */
+    /** grounds-forge API URL. Precedence: this value, GROUNDS_API_URL, credentials file apiUrl, https://platform.grnds.io. */
     abstract val apiUrl: Property<String>
     /** Path to grounds.yaml. Defaults to `<projectDir>/grounds.yaml`. */
     abstract val manifestFile: RegularFileProperty

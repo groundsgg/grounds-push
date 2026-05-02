@@ -29,7 +29,10 @@ abstract class GroundsPushRetryTask : DefaultTask() {
         val id = pushId.orNull
             ?: throw GradleException("grounds-push-retry: --pushId=<id> is required")
         val creds = CredentialResolver().resolve()
-        val resolvedApi = apiUrl.orNull ?: System.getenv("GROUNDS_API_URL") ?: "https://platform.grnds.io"
+        val resolvedApi = (apiUrl.orNull
+            ?: System.getenv("GROUNDS_API_URL")
+            ?: (creds as? Credentials.FromFile)?.apiUrl
+            ?: "https://platform.grnds.io").trimEnd('/')
         val client = GroundsForgeClient(
             apiUrl = resolvedApi,
             token = creds.accessToken,

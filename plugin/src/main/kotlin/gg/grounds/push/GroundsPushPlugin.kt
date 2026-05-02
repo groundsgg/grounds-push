@@ -50,7 +50,7 @@ class GroundsPushPlugin : Plugin<Project> {
                     p.tasks.findByName(name) as? Jar
                 }
                 if (autoJarTask != null) {
-                    pushTask.configure { t -> t.jarFile.set(autoJarTask.archiveFile) }
+                    pushTask.configure { t -> t.autoDetectedJarFile.set(autoJarTask.archiveFile) }
                     pushTask.configure { t -> t.dependsOn(autoJarTask) }
                 }
             }

@@ -29,7 +29,7 @@ class CredentialResolutionException(message: String, cause: Throwable? = null) :
 interface Platform {
     fun env(name: String): String?
     fun homeDir(): File
-    fun userDir(): File           // for Windows APPDATA fallback computation
+    fun userDir(): File // for Windows APPDATA fallback computation
     fun osName(): String
     fun isUnix(): Boolean
     fun warn(message: String)
@@ -42,7 +42,7 @@ object DefaultPlatform : Platform {
     override fun userDir() = File(System.getProperty("user.dir"))
     override fun osName() = System.getProperty("os.name").lowercase()
     override fun isUnix() = !osName().contains("win")
-    override fun warn(message: String) = System.err.println("[grounds-push] warning: $message")
+    override fun warn(message: String) = System.err.println("[grounds-push] $message")
     override fun fileExists(f: File) = f.exists() && f.isFile
 }
 
@@ -151,8 +151,8 @@ class CredentialResolver(
             }
             if (groupOrOther) {
                 platform.warn(
-                    "${file.absolutePath} has group/other permissions; " +
-                        "recommend `chmod 0600 ${file.absolutePath}` to restrict."
+                    "Credential file permissions are insecure " +
+                        "(path=${file.absolutePath}, recommendation=chmod_0600)"
                 )
             }
         } catch (_: UnsupportedOperationException) {

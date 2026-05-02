@@ -26,7 +26,7 @@ interface PushSseListener {
 }
 
 class GroundsForgeClient(
-    private val apiUrl: String,
+    apiUrl: String,
     private val token: String,
     connectTimeout: Duration = Duration.ofSeconds(20),
     callTimeout: Duration = Duration.ofMinutes(5),
@@ -36,6 +36,7 @@ class GroundsForgeClient(
         .retryOnConnectionFailure(false)
         .build(),
 ) {
+    private val apiUrl = apiUrl.trimEnd('/')
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
     class ApiException(
@@ -146,17 +147,27 @@ class GroundsForgeClient(
                         "done" -> listener.onDone()
                         "error" -> {
                             val obj = parseObj(data)
-                            listener.onError(obj["reason"]?.jsonPrimitive?.content ?: "unknown")
+                            listener.onError(
+                                "stream_error (pushId=$pushId, " +
+                                    "reason=${obj["reason"]?.jsonPrimitive?.content ?: "unknown"})"
+                            )
                         }
                     }
-                } catch (_: Exception) {
-                    // Malformed frame — swallow to keep the stream going.
+                } catch (e: Exception) {
+                    listener.onWarning(
+                        "malformed_sse_frame (pushId=$pushId, event=${type ?: "message"}, " +
+                            "reason=${e.message ?: e::class.java.simpleName})"
+                    )
                 }
             }
 
             override fun onClosed(eventSource: EventSource) { listener.onStreamClosed(normal = true) }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: okhttp3.Response?) {
+                listener.onWarning(
+                    "stream_failed (pushId=$pushId, statusCode=${response?.code ?: "none"}, " +
+                        "reason=${response?.message?.takeIf { it.isNotEmpty() } ?: t?.message ?: "unknown"})"
+                )
                 listener.onStreamClosed(normal = false)
             }
         })
