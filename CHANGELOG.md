@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/groundsgg/grounds-push/compare/v0.3.0...v0.3.1) (2026-05-02)
+
+
+### Bug Fixes
+
+* name release-please package ([53d3469](https://github.com/groundsgg/grounds-push/commit/53d34693785d98a93dc179d0d52536e1355756c6))
+
 ## [0.3.0](https://github.com/groundsgg/grounds-push/compare/v0.2.0...v0.3.0) (2026-05-02)
 
 
