@@ -18,6 +18,8 @@ permissions:
 jobs:
   publish:
     runs-on: self-hosted
+    env:
+      GRADLE_USER_HOME: ${{ runner.temp }}/gradle-home-${{ github.run_id }}-${{ github.job }}
     steps:
       - name: Check out
         uses: actions/checkout@v6
