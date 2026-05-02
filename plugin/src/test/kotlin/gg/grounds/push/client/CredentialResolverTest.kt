@@ -138,6 +138,7 @@ class CredentialResolverTest {
         }
         val plat = FakePlatform(homeDir = tmp)
         CredentialResolver(plat).resolve()
-        assertTrue(plat.warnings.any { it.contains("chmod") })
+        assertTrue(plat.warnings.any { it.contains("Credential file permissions are insecure") })
+        assertTrue(plat.warnings.any { it.contains("recommendation=chmod_0600") })
     }
 }

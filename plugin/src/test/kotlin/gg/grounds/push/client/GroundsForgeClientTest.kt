@@ -53,6 +53,19 @@ class GroundsForgeClientTest {
     }
 
     @Test
+    fun `client normalizes trailing slash in api url`(@TempDir tmp: File) {
+        server.enqueue(MockResponse().setResponseCode(202).setBody(
+            """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""
+        ))
+        val trailingSlashClient = GroundsForgeClient(server.url("/").toString(), "test-token")
+
+        trailingSlashClient.createPush("""{"name":"x","type":"gamemode","baseImage":"minestom"}""", "dev", fakeJar(tmp))
+
+        val recorded = server.takeRequest()
+        assertEquals("/v1/pushes", recorded.path)
+    }
+
+    @Test
     fun `createPush 200 idempotent hit`(@TempDir tmp: File) {
         server.enqueue(MockResponse().setResponseCode(200).setBody(
             """{"pushId":"p1","status":"build_succeeded","reused":true,"logsUrl":null}"""
@@ -159,6 +172,55 @@ class GroundsForgeClientTest {
             override fun onStreamClosed(normal: Boolean) {}
         })
         assertTrue(errorLatch.await(5, TimeUnit.SECONDS))
-        assertEquals("token_expired", errors[0])
+        assertTrue(errors[0].contains("stream_error"), errors[0])
+        assertTrue(errors[0].contains("pushId=p1"), errors[0])
+        assertTrue(errors[0].contains("reason=token_expired"), errors[0])
+    }
+
+    @Test
+    fun `streamLogs reports malformed frames with pushId context`() {
+        val sseBody = "event: status\ndata: {not-json}\n\n" +
+            "event: done\ndata: {}\n\n"
+        server.enqueue(MockResponse()
+            .setHeader("Content-Type", "text/event-stream")
+            .setBody(sseBody)
+        )
+
+        val warningLatch = CountDownLatch(1)
+        val warnings = mutableListOf<String>()
+        client.streamLogs("p1", object : PushSseListener {
+            override fun onStatus(status: String, imageTag: String?, failureReason: String?) {}
+            override fun onLog(ts: String, line: String) {}
+            override fun onWarning(reason: String) { warnings += reason; warningLatch.countDown() }
+            override fun onDone() {}
+            override fun onError(reason: String) {}
+            override fun onStreamClosed(normal: Boolean) {}
+        })
+
+        assertTrue(warningLatch.await(5, TimeUnit.SECONDS), "malformed frame warning not received")
+        assertTrue(warnings[0].contains("malformed_sse_frame"), warnings[0])
+        assertTrue(warnings[0].contains("pushId=p1"), warnings[0])
+        assertTrue(warnings[0].contains("event=status"), warnings[0])
+    }
+
+    @Test
+    fun `streamLogs reports failed stream response with pushId and status code`() {
+        server.enqueue(MockResponse().setResponseCode(503).setBody("service unavailable"))
+
+        val warningLatch = CountDownLatch(1)
+        val warnings = mutableListOf<String>()
+        client.streamLogs("p1", object : PushSseListener {
+            override fun onStatus(status: String, imageTag: String?, failureReason: String?) {}
+            override fun onLog(ts: String, line: String) {}
+            override fun onWarning(reason: String) { warnings += reason; warningLatch.countDown() }
+            override fun onDone() {}
+            override fun onError(reason: String) {}
+            override fun onStreamClosed(normal: Boolean) {}
+        })
+
+        assertTrue(warningLatch.await(5, TimeUnit.SECONDS), "stream failure warning not received")
+        assertTrue(warnings[0].contains("stream_failed"), warnings[0])
+        assertTrue(warnings[0].contains("pushId=p1"), warnings[0])
+        assertTrue(warnings[0].contains("statusCode=503"), warnings[0])
     }
 }
