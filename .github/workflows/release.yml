@@ -19,7 +19,7 @@ jobs:
   publish:
     runs-on: self-hosted
     env:
-      GRADLE_USER_HOME: ${{ runner.temp }}/gradle-home-${{ github.run_id }}-${{ github.job }}
+      GRADLE_USER_HOME: /tmp/grounds-push-gradle-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Check out
         uses: actions/checkout@v6
