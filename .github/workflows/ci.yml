@@ -28,11 +28,8 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      - name: Plugin build and tests
-        run: ./gradlew :plugin:build :plugin:test --no-daemon --stacktrace
-
-      - name: Sample build
-        run: ./gradlew :sample:build --no-daemon --stacktrace
+      - name: Build and test
+        run: ./gradlew :plugin:build :plugin:test :sample:build --no-daemon --stacktrace
 
       - name: Upload test reports on failure
         if: failure()
