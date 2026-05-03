@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/groundsgg/grounds-push/compare/v0.3.1...v0.3.2) (2026-05-02)
+
+
+### Bug Fixes
+
+* improve grounds-push developer UX ([#11](https://github.com/groundsgg/grounds-push/issues/11)) ([0ac0cfe](https://github.com/groundsgg/grounds-push/commit/0ac0cfeb120c861252e505c85c0cf9e70ac29fc8))
+
 ## [0.3.1](https://github.com/groundsgg/grounds-push/compare/v0.3.0...v0.3.1) (2026-05-02)
 
 
