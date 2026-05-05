@@ -9,7 +9,10 @@ import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
+import org.gradle.work.DisableCachingByDefault
 import java.io.File
 import java.net.URI
 import java.nio.file.Files
@@ -34,9 +37,10 @@ import java.nio.file.StandardCopyOption
  *   ghcr.io/groundsgg/paper image targets). Override with
  *   `groundsPush.paperVersion = "1.21.5"` once forge bumps.
  */
+@DisableCachingByDefault(because = "Boots a long-running local Minecraft server; no deterministic outputs to cache.")
 abstract class GroundsTestLocalTask : DefaultTask() {
-    @get:InputFile abstract val manifestFile: RegularFileProperty
-    @get:InputFile abstract val jarFile: RegularFileProperty
+    @get:InputFile @get:PathSensitive(PathSensitivity.RELATIVE) abstract val manifestFile: RegularFileProperty
+    @get:InputFile @get:PathSensitive(PathSensitivity.RELATIVE) abstract val jarFile: RegularFileProperty
 
     /** Paper version to download. Defaults to 1.21.4 (matches forge baseImage). */
     @get:Input @get:Optional abstract val paperVersion: Property<String>
