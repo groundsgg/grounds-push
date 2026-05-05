@@ -37,6 +37,13 @@ abstract class GroundsPushTask : DefaultTask() {
     @Option(option = "target", description = "Override target (dev|staging)")
     fun setTargetOption(v: String) { overrideTarget.set(v) }
 
+    @get:Internal
+    val force: Property<Boolean> =
+        project.objects.property(Boolean::class.java).convention(false)
+
+    @Option(option = "force", description = "Skip reuse-by-contentHash and force a fresh build")
+    fun setForceOption(v: Boolean) { force.set(v) }
+
     @TaskAction
     fun run() {
         val manifest = try {
@@ -108,7 +115,7 @@ abstract class GroundsPushTask : DefaultTask() {
         })
 
         val push = try {
-            client.createPush(manifestJson, resolvedTarget, jar)
+            client.createPush(manifestJson, resolvedTarget, jar, force = force.get())
         } catch (e: GroundsForgeClient.ApiException) {
             if (!failOnWhitelistError.get() && e.isWhitelistError()) {
                 logger.warn(
