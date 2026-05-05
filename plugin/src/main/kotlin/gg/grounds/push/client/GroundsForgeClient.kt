@@ -49,6 +49,7 @@ class GroundsForgeClient(
         manifestJson: String,
         target: String,
         jarFile: File,
+        force: Boolean = false,
     ): CreatePushResponse {
         val body = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
@@ -62,8 +63,9 @@ class GroundsForgeClient(
                 jarFile.asRequestBody("application/java-archive".toMediaType()),
             )
             .build()
+        val url = if (force) "$apiUrl/v1/pushes?force=true" else "$apiUrl/v1/pushes"
         val req = Request.Builder()
-            .url("$apiUrl/v1/pushes")
+            .url(url)
             .header("Authorization", "Bearer $token")
             .post(body)
             .build()
