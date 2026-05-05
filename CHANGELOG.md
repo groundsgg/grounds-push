@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/groundsgg/grounds-push/compare/v0.3.2...v0.4.0) (2026-05-05)
+
+
+### Features
+
+* **plugin:** --force flag to skip forge contentHash dedup ([#13](https://github.com/groundsgg/grounds-push/issues/13)) ([e3f27e0](https://github.com/groundsgg/grounds-push/commit/e3f27e0e1dce83d64158620a3c89bb50b43cbe83))
+
 ## [0.3.2](https://github.com/groundsgg/grounds-push/compare/v0.3.1...v0.3.2) (2026-05-02)
 
 
