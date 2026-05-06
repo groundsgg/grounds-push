@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/groundsgg/grounds-push/compare/v0.4.0...v0.5.0) (2026-05-06)
+
+
+### Features
+
+* add grounds push build link ([#16](https://github.com/groundsgg/grounds-push/issues/16)) ([9ef7878](https://github.com/groundsgg/grounds-push/commit/9ef7878f80391c0f2d76778f0a729c219f274d14))
+* **test-local:** groundsTestLocal Gradle task — offline dev loop ([#3](https://github.com/groundsgg/grounds-push/issues/3)) ([6532422](https://github.com/groundsgg/grounds-push/commit/6532422cc52fc5ddde550924534c2edbf0689ddd))
+
 ## [0.4.0](https://github.com/groundsgg/grounds-push/compare/v0.3.2...v0.4.0) (2026-05-05)
 
 
