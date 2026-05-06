@@ -45,6 +45,10 @@ abstract class GroundsPushRetryTask : DefaultTask() {
             throw GradleException("grounds-push-retry failed: ${e.message}", e)
         }
         logger.lifecycle("[grounds-push-retry] pushId=${retry.pushId} status=${retry.status}")
+        logger.lifecycle(
+            "[grounds-push-retry] Build link available " +
+                "(pushId=${retry.pushId}, url=${retry.buildLink(resolvedApi)})"
+        )
         // NOTE: streaming logs for the retry is identical to GroundsPushTask.streamAndWait.
         // For Phase 2.2 we print the logsUrl and expect the user to follow separately.
         logger.lifecycle("[grounds-push-retry] Logs: $resolvedApi${retry.logsUrl ?: "/v1/pushes/${retry.pushId}/logs"}")
