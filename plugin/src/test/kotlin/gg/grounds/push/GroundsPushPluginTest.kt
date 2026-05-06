@@ -96,6 +96,32 @@ class GroundsPushPluginTest {
     }
 
     @Test
+    fun `groundsPush resolves manifest jar without execution time project access warning`(@TempDir tmp: File) {
+        File(tmp, "settings.gradle.kts").writeText("rootProject.name = \"test\"\n")
+        File(tmp, "build.gradle.kts").writeText("""
+            plugins {
+                id("java")
+                id("gg.grounds.push")
+            }
+        """.trimIndent())
+        File(tmp, "grounds.yaml").writeText("""
+            name: test-plugin
+            type: plugin-paper
+            baseImage: paper
+            jar: build/libs/from-manifest.jar
+        """.trimIndent())
+
+        val result = GradleRunner.create()
+            .withProjectDir(tmp)
+            .withPluginClasspath()
+            .withArguments("groundsPush", "--warning-mode=fail")
+            .buildAndFail()
+
+        assertTrue(result.output.contains("build/libs/from-manifest.jar"), result.output)
+        assertTrue(!result.output.contains("Invocation of Task.project at execution time"), result.output)
+    }
+
+    @Test
     fun `groundsPushRetry uses api url from credentials file`(@TempDir tmp: File) {
         val server = MockWebServer()
         server.start()

@@ -25,6 +25,8 @@ class GroundsPushPlugin : Plugin<Project> {
             t.timeoutMinutes.set(ext.timeoutMinutes)
             t.connectTimeoutSeconds.set(ext.connectTimeoutSeconds)
             t.failOnWhitelistError.set(ext.failOnWhitelistError)
+            t.projectDirectory.set(target.layout.projectDirectory)
+            t.force.convention(false)
         }
 
         target.tasks.register("groundsPushRetry", GroundsPushRetryTask::class.java) { t ->
