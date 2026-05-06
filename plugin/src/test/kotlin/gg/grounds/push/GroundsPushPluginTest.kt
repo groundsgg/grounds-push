@@ -101,7 +101,7 @@ class GroundsPushPluginTest {
         server.start()
         try {
             server.enqueue(MockResponse().setResponseCode(202).setBody(
-                """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""
+                """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs","buildUrl":"https://platform.grnds.io/builds/p1"}"""
             ))
             File(tmp, "settings.gradle.kts").writeText("rootProject.name = \"test\"\n")
             File(tmp, "build.gradle.kts").writeText("""
@@ -180,7 +180,7 @@ class GroundsPushPluginTest {
         server.start()
         try {
             server.enqueue(MockResponse().setResponseCode(202).setBody(
-                """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""
+                """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs","buildUrl":"https://platform.grnds.io/builds/p1"}"""
             ))
             val sseBody = "event: status\ndata: {\"status\":\"building\"}\n\n" +
                 "event: status\ndata: {\"status\":\"build_succeeded\",\"imageTag\":\"zot/test:abc\"}\n\n" +
@@ -223,6 +223,7 @@ class GroundsPushPluginTest {
             assertTrue(result.output.contains("Credentials resolved (source="), result.output)
             assertTrue(result.output.contains("Artifact selected (jarName=app.jar, size=104 B, target=staging"), result.output)
             assertTrue(result.output.contains("Push accepted (pushId=p1, target=staging, statusCode=202, reused=false)"), result.output)
+            assertTrue(result.output.contains("Build link available (pushId=p1, url=https://platform.grnds.io/builds/p1)"), result.output)
             assertTrue(result.output.contains("Build status received (pushId=p1, status=building"), result.output)
             assertTrue(result.output.contains("Build succeeded (pushId=p1, imageTag=zot/test:abc)"), result.output)
             assertTrue(!result.output.contains("Plugin initialized (version=consumer-app)"), result.output)

@@ -8,6 +8,8 @@ data class CreatePushResponse(
     val status: String,
     val reused: Boolean,
     val logsUrl: String? = null,
+    val buildUrl: String? = null,
+    val webUrl: String? = null,
 )
 
 @Serializable

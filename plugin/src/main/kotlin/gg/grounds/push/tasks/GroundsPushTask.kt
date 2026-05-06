@@ -132,6 +132,10 @@ abstract class GroundsPushTask : DefaultTask() {
                 "(pushId=${push.pushId}, target=$resolvedTarget, statusCode=${if (push.reused) "200" else "202"}, " +
                 "reused=${push.reused})"
         )
+        logger.lifecycle(
+            "[grounds-push] Build link available " +
+                "(pushId=${push.pushId}, url=${push.buildLink(resolvedApiUrl)})"
+        )
         if (push.reused) {
             logger.lifecycle("[grounds-push] Build reused (pushId=${push.pushId}, target=$resolvedTarget, reason=content_hash)")
             return
@@ -186,34 +190,38 @@ abstract class GroundsPushTask : DefaultTask() {
             throw GradleException("grounds-push: push $pushId exceeded ${timeoutMinutes.get()}-minute timeout")
         }
 
-        // If SSE closed without terminal status, poll once.
-        if (terminal.get() == null) {
-            try {
-                val detail = client.getPush(pushId)
-                when (detail.status) {
-                    "build_succeeded" -> terminal.set(TerminalState.Succeeded(detail.imageTag))
-                    "build_failed" -> terminal.set(TerminalState.Failed(detail.failureReason ?: "unknown"))
-                    else -> throw GradleException(
-                        "grounds-push: stream closed with non-terminal status " +
-                            "(pushId=$pushId, status=${detail.status})"
-                    )
-                }
-            } catch (e: GroundsForgeClient.ApiException) {
-                throw GradleException(
-                    "grounds-push: stream closed and status poll failed " +
-                        "(pushId=$pushId, statusCode=${e.statusCode}, reason=${e.message})",
-                    e,
+        val terminalState = terminal.get() ?: pollTerminalState(client, pushId)
+        handleTerminalState(pushId, terminalState, last20)
+    }
+
+    private fun pollTerminalState(client: GroundsForgeClient, pushId: String): TerminalState {
+        try {
+            val detail = client.getPush(pushId)
+            return when (detail.status) {
+                "build_succeeded" -> TerminalState.Succeeded(detail.imageTag)
+                "build_failed" -> TerminalState.Failed(detail.failureReason ?: "unknown")
+                else -> throw GradleException(
+                    "grounds-push: stream closed with non-terminal status " +
+                        "(pushId=$pushId, status=${detail.status})"
                 )
             }
+        } catch (e: GroundsForgeClient.ApiException) {
+            throw GradleException(
+                "grounds-push: stream closed and status poll failed " +
+                    "(pushId=$pushId, statusCode=${e.statusCode}, reason=${e.message})",
+                e,
+            )
         }
+    }
 
-        when (val t = terminal.get()!!) {
+    private fun handleTerminalState(pushId: String, terminalState: TerminalState, last20: ArrayDeque<String>) {
+        when (terminalState) {
             is TerminalState.Succeeded -> {
-                logger.lifecycle("[grounds-push] Build succeeded (pushId=$pushId, imageTag=${t.imageTag ?: "unknown"})")
+                logger.lifecycle("[grounds-push] Build succeeded (pushId=$pushId, imageTag=${terminalState.imageTag ?: "unknown"})")
             }
             is TerminalState.Failed -> {
                 val tailMsg = if (last20.isNotEmpty()) "\n  last 20 lines:\n" + last20.joinToString("\n") { "    $it" } else ""
-                throw GradleException("grounds-push: build_failed (pushId=$pushId, reason=${t.reason})$tailMsg")
+                throw GradleException("grounds-push: build_failed (pushId=$pushId, reason=${terminalState.reason})$tailMsg")
             }
         }
     }
