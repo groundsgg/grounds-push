@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/groundsgg/grounds-push/compare/v0.5.0...v0.5.1) (2026-05-06)
+
+
+### Bug Fixes
+
+* **gradle:** remove execution-time project access ([#17](https://github.com/groundsgg/grounds-push/issues/17)) ([6970748](https://github.com/groundsgg/grounds-push/commit/6970748f75d72e6146a7f1450c998041f1d7f57c))
+
 ## [0.5.0](https://github.com/groundsgg/grounds-push/compare/v0.4.0...v0.5.0) (2026-05-06)
 
 
