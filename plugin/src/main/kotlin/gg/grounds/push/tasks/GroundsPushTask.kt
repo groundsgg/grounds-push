@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
+import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
@@ -30,16 +31,16 @@ abstract class GroundsPushTask : DefaultTask() {
     @get:Input abstract val timeoutMinutes: Property<Int>
     @get:Input abstract val connectTimeoutSeconds: Property<Int>
     @get:Input abstract val failOnWhitelistError: Property<Boolean>
+    @get:Internal abstract val projectDirectory: DirectoryProperty
 
     @get:Internal
-    val overrideTarget: Property<String> = project.objects.property(String::class.java)
+    abstract val overrideTarget: Property<String>
 
     @Option(option = "target", description = "Override target (dev|staging)")
     fun setTargetOption(v: String) { overrideTarget.set(v) }
 
     @get:Internal
-    val force: Property<Boolean> =
-        project.objects.property(Boolean::class.java).convention(false)
+    abstract val force: Property<Boolean>
 
     @Option(option = "force", description = "Skip reuse-by-contentHash and force a fresh build")
     fun setForceOption(v: Boolean) { force.set(v) }
@@ -54,11 +55,11 @@ abstract class GroundsPushTask : DefaultTask() {
 
         val manifestJar = manifest.jar
             .takeIf { it != DEFAULT_MANIFEST_JAR }
-            ?.let { project.file(it) }
+            ?.let { projectDirectory.file(it).get().asFile }
         val jar = jarFile.orNull?.asFile
             ?: manifestJar
             ?: autoDetectedJarFile.orNull?.asFile
-            ?: project.file(manifest.jar)
+            ?: projectDirectory.file(manifest.jar).get().asFile
         if (!jar.isFile) {
             throw GradleException(
                 "grounds-push: JAR not found at ${jar.absolutePath}. " +
