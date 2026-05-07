@@ -43,6 +43,11 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp-sse:5.3.2")
     implementation("org.yaml:snakeyaml:2.6")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    // Multi-plugin bundle (plugins: [...] in grounds.yaml) packs the
+    // resolved JARs into a tar.gz that grounds-forge sends to kaniko
+    // unchanged. The JDK has no tar support; commons-compress is the
+    // standard JVM choice and ships transitively-light.
+    implementation("org.apache.commons:commons-compress:1.27.1")
 
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:6.0.3")

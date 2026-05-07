@@ -61,7 +61,8 @@ Schema:
 | `name` | yes | Grounds component name. |
 | `type` | yes | One of `gamemode`, `plugin-paper`, `plugin-velocity`, or `service`. |
 | `baseImage` | yes | One of `paper`, `velocity`, `minestom`, or `service`. |
-| `jar` | no | JAR path relative to the project root. Defaults to `build/libs/*.jar`. If `groundsPush.jarFile` is not set, a non-default `jar` value is used before auto-detected `shadowJar`/`jar` outputs. |
+| `jar` | no | JAR path relative to the project root. Defaults to `build/libs/*.jar`. If `groundsPush.jarFile` is not set, a non-default `jar` value is used before auto-detected `shadowJar`/`jar` outputs. Mutually exclusive with `plugins`. |
+| `plugins` | no | List of 2..10 JAR paths bundled into one Paper/Velocity/gamemode server. See *Multi-plugin bundles* below. Forbidden for `type: service`. |
 | `target` | no | `dev` or `staging`. The Gradle extension and `--target` option override this value. |
 | `resources.cpu` | no | Requested CPU, for example `500m`. |
 | `resources.memory` | no | Requested memory, for example `512Mi`. |
@@ -83,6 +84,35 @@ groundsPush {
 `groundsPush.jarFile` is the highest-priority JAR override. If it is not set,
 the plugin uses a non-default `jar` from `grounds.yaml`, then falls back to an
 auto-detected `shadowJar` or `jar` task output.
+
+## Multi-plugin bundles
+
+Test several plugins together on a single Paper / Velocity / gamemode
+server by listing their JARs in `plugins:`:
+
+```yaml
+name: combo
+type: plugin-paper
+baseImage: paper
+plugins:
+  - sub-projects/economy/build/libs/economy.jar
+  - sub-projects/chat/build/libs/chat.jar
+  - sub-projects/teams/build/libs/teams.jar
+```
+
+The plugin packs the listed JARs into a tar.gz that grounds-forge
+forwards to the build pipeline. They land at `/app/plugins/` in
+manifest order (numeric prefix preserves load order). Limits: 2..10
+plugins, 50 MB total upload, no `service` type.
+
+For dependent build tasks set `groundsPush.dependsOn(...)` per
+sub-project so each JAR exists before push:
+
+```kotlin
+tasks.named("groundsPush") {
+    dependsOn(":economy:jar", ":chat:jar", ":teams:jar")
+}
+```
 
 ## Push
 

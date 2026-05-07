@@ -10,6 +10,14 @@ data class GroundsYaml(
     val type: String,              // "gamemode" | "plugin-paper" | "plugin-velocity" | "service"
     val baseImage: String,         // "paper" | "velocity" | "minestom" | "service"
     val jar: String = "build/libs/*.jar",
+    /**
+     * Multi-plugin bundle: list of glob/path entries, each resolves to a
+     * plugin JAR that lands in `/app/plugins/` on the rendered server.
+     * Mutually exclusive with `jar`. Length 2..10. Forbidden for
+     * `type: service` — services are single-jar workloads with their
+     * own ENTRYPOINT.
+     */
+    val plugins: List<String>? = null,
     val target: String? = null,    // optional — plugin extension's target wins when set
     val resources: Resources? = null,
 ) {
@@ -41,7 +49,23 @@ object GroundsYamlParser {
         val name = raw.requireString("name")
         val type = raw.requireString("type")
         val baseImage = raw.requireString("baseImage")
-        val jar = raw.optString("jar") ?: "build/libs/*.jar"
+        val rawJar = raw.optString("jar")
+        val plugins = raw.optStringList("plugins")
+        if (plugins != null) {
+            if (rawJar != null) throw GroundsYamlParseException(
+                "grounds.yaml: 'plugins' and 'jar' are mutually exclusive — pick one",
+            )
+            if (plugins.size < 2) throw GroundsYamlParseException(
+                "grounds.yaml: 'plugins' must contain at least 2 entries (use 'jar' for single-plugin)",
+            )
+            if (plugins.size > 10) throw GroundsYamlParseException(
+                "grounds.yaml: 'plugins' supports at most 10 entries, got ${plugins.size}",
+            )
+            if (type == "service") throw GroundsYamlParseException(
+                "grounds.yaml: 'plugins' is not supported for type 'service'",
+            )
+        }
+        val jar = rawJar ?: "build/libs/*.jar"
         val target = raw.optString("target")
         val resourcesMap = raw["resources"]
         val resources = if (resourcesMap is Map<*, *>) {
@@ -56,7 +80,8 @@ object GroundsYamlParser {
         }
         return GroundsYaml(
             name = name, type = type, baseImage = baseImage,
-            jar = jar, target = target, resources = resources,
+            jar = jar, plugins = plugins,
+            target = target, resources = resources,
         )
     }
 
@@ -81,5 +106,18 @@ object GroundsYamlParser {
             "grounds.yaml: field '$key' must be a string, got ${v.javaClass.simpleName}",
         )
         return v.ifEmpty { null }
+    }
+
+    private fun Map<*, *>.optStringList(key: String): List<String>? {
+        val v = this[key] ?: return null
+        if (v !is List<*>) throw GroundsYamlParseException(
+            "grounds.yaml: field '$key' must be a sequence of strings, got ${v.javaClass.simpleName}",
+        )
+        return v.map { item ->
+            if (item !is String || item.isEmpty()) throw GroundsYamlParseException(
+                "grounds.yaml: field '$key' entries must be non-empty strings",
+            )
+            item
+        }
     }
 }

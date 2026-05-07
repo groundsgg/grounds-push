@@ -1,5 +1,6 @@
 package gg.grounds.push.tasks
 
+import gg.grounds.push.bundle.PluginBundler
 import gg.grounds.push.client.*
 import gg.grounds.push.manifest.GroundsYamlParseException
 import gg.grounds.push.manifest.GroundsYamlParser
@@ -16,6 +17,7 @@ import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
 import org.gradle.api.tasks.options.Option
 import org.gradle.work.DisableCachingByDefault
+import java.io.File
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -32,6 +34,10 @@ abstract class GroundsPushTask : DefaultTask() {
     @get:Input abstract val connectTimeoutSeconds: Property<Int>
     @get:Input abstract val failOnWhitelistError: Property<Boolean>
     @get:Internal abstract val projectDirectory: DirectoryProperty
+    /** Output location for multi-plugin tar.gz bundles (only used when
+     *  manifest declares `plugins:`). Lives under the project's
+     *  buildDirectory so it gets cleaned with `gradle clean`. */
+    @get:Internal abstract val bundleOutputFile: RegularFileProperty
 
     @get:Internal
     abstract val overrideTarget: Property<String>
@@ -53,20 +59,45 @@ abstract class GroundsPushTask : DefaultTask() {
             throw GradleException(e.message!!, e)
         }
 
-        val manifestJar = manifest.jar
-            .takeIf { it != DEFAULT_MANIFEST_JAR }
-            ?.let { projectDirectory.file(it).get().asFile }
-        val jar = jarFile.orNull?.asFile
-            ?: manifestJar
-            ?: autoDetectedJarFile.orNull?.asFile
-            ?: projectDirectory.file(manifest.jar).get().asFile
-        if (!jar.isFile) {
-            throw GradleException(
-                "grounds-push: JAR not found at ${jar.absolutePath}. " +
-                    "Did the build task run? Or set groundsPush.jarFile explicitly."
-            )
+        // Two upload shapes:
+        //   1. plugins: [a.jar, b.jar, ...] in the manifest → tar.gz
+        //      bundle, multi-plugin server (forge detects gzip magic).
+        //   2. single jar (autoDetected, ext.jarFile, or manifest.jar)
+        //      → existing path.
+        val manifestPlugins = manifest.plugins
+        val artifact: File = if (manifestPlugins != null) {
+            val resolved = manifestPlugins.map { p ->
+                val f = projectDirectory.file(p).get().asFile
+                if (!f.isFile) throw GradleException(
+                    "grounds-push: plugin entry not found at ${f.absolutePath} " +
+                        "(grounds.yaml plugins[]). Did the build task run for that subproject?"
+                )
+                f
+            }
+            val bundleFile = bundleOutputFile.get().asFile
+            try {
+                PluginBundler.bundle(resolved, bundleFile)
+            } catch (e: IllegalArgumentException) {
+                throw GradleException("grounds-push: ${e.message}", e)
+            }
+            bundleFile
+        } else {
+            val manifestJar = manifest.jar
+                .takeIf { it != DEFAULT_MANIFEST_JAR }
+                ?.let { projectDirectory.file(it).get().asFile }
+            val jar = jarFile.orNull?.asFile
+                ?: manifestJar
+                ?: autoDetectedJarFile.orNull?.asFile
+                ?: projectDirectory.file(manifest.jar).get().asFile
+            if (!jar.isFile) {
+                throw GradleException(
+                    "grounds-push: JAR not found at ${jar.absolutePath}. " +
+                        "Did the build task run? Or set groundsPush.jarFile explicitly."
+                )
+            }
+            jar
         }
-        val sizeCheck = JarSizeGuard.check(jar.length())
+        val sizeCheck = JarSizeGuard.check(artifact.length())
         when (sizeCheck) {
             is JarSizeGuard.Result.Reject -> throw GradleException("grounds-push: ${sizeCheck.message}")
             is JarSizeGuard.Result.Warn -> logger.lifecycle("[grounds-push] ${sizeCheck.message}")
@@ -93,7 +124,9 @@ abstract class GroundsPushTask : DefaultTask() {
         logger.lifecycle("[grounds-push] Credentials resolved (source=${credsSource(creds)})")
         logger.lifecycle(
             "[grounds-push] Artifact selected " +
-                "(jarName=${jar.name}, size=${humanSize(jar.length())}, target=$resolvedTarget, apiUrl=$resolvedApiUrl)"
+                "(name=${artifact.name}, size=${humanSize(artifact.length())}, " +
+                "shape=${if (manifestPlugins != null) "bundle(${manifestPlugins.size})" else "single-jar"}, " +
+                "target=$resolvedTarget, apiUrl=$resolvedApiUrl)"
         )
 
         val client = GroundsForgeClient(
@@ -116,7 +149,7 @@ abstract class GroundsPushTask : DefaultTask() {
         })
 
         val push = try {
-            client.createPush(manifestJson, resolvedTarget, jar, force = force.get())
+            client.createPush(manifestJson, resolvedTarget, artifact, force = force.get())
         } catch (e: GroundsForgeClient.ApiException) {
             if (!failOnWhitelistError.get() && e.isWhitelistError()) {
                 logger.warn(

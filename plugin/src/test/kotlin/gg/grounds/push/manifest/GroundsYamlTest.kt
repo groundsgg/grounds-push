@@ -125,6 +125,64 @@ class GroundsYamlTest {
     }
 
     @Test
+    fun `parses plugins as multi-jar bundle`() {
+        val m = parse("""
+            name: combo
+            type: plugin-paper
+            baseImage: paper
+            plugins:
+              - build/libs/foo.jar
+              - build/libs/bar.jar
+        """.trimIndent())
+        assertEquals(listOf("build/libs/foo.jar", "build/libs/bar.jar"), m.plugins)
+    }
+
+    @Test
+    fun `rejects plugins with fewer than 2 entries`() {
+        val e = assertThrows<GroundsYamlParseException> {
+            parse("""
+                name: combo
+                type: plugin-paper
+                baseImage: paper
+                plugins:
+                  - build/libs/only.jar
+            """.trimIndent())
+        }
+        assert(e.message!!.contains("at least 2")) { e.message!! }
+    }
+
+    @Test
+    fun `rejects plugins combined with jar`() {
+        val e = assertThrows<GroundsYamlParseException> {
+            parse("""
+                name: combo
+                type: plugin-paper
+                baseImage: paper
+                jar: build/libs/x.jar
+                plugins:
+                  - build/libs/foo.jar
+                  - build/libs/bar.jar
+            """.trimIndent())
+        }
+        assert(e.message!!.contains("mutually exclusive")) { e.message!! }
+    }
+
+    @Test
+    fun `rejects plugins for type service`() {
+        val e = assertThrows<GroundsYamlParseException> {
+            parse("""
+                name: svc
+                type: service
+                baseImage: service
+                plugins:
+                  - build/libs/foo.jar
+                  - build/libs/bar.jar
+            """.trimIndent())
+        }
+        assert(e.message!!.contains("service")) { e.message!! }
+    }
+
+    @Test
     fun `rejects resources as a non-mapping`() {
         val e = assertThrows<GroundsYamlParseException> {
             parse("""

@@ -51,6 +51,14 @@ class GroundsForgeClient(
         jarFile: File,
         force: Boolean = false,
     ): CreatePushResponse {
+        // Multi-plugin bundles ship as tar.gz; the server detects the
+        // upload shape via magic bytes (gzip 1f8b vs zip PK), so this
+        // content-type is purely cosmetic for proxy log readability.
+        val contentType = if (jarFile.name.endsWith(".tar.gz")) {
+            "application/gzip".toMediaType()
+        } else {
+            "application/java-archive".toMediaType()
+        }
         val body = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart(
@@ -60,7 +68,7 @@ class GroundsForgeClient(
             .addFormDataPart("target", target)
             .addFormDataPart(
                 "jar", jarFile.name,
-                jarFile.asRequestBody("application/java-archive".toMediaType()),
+                jarFile.asRequestBody(contentType),
             )
             .build()
         val url = if (force) "$apiUrl/v1/pushes?force=true" else "$apiUrl/v1/pushes"
