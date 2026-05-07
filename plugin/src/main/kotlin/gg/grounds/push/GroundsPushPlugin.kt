@@ -1,11 +1,14 @@
 package gg.grounds.push
 
+import gg.grounds.push.manifest.GroundsYamlParseException
+import gg.grounds.push.manifest.GroundsYamlParser
 import gg.grounds.push.tasks.GroundsPromoteTask
 import gg.grounds.push.tasks.GroundsPushRetryTask
 import gg.grounds.push.tasks.GroundsPushTask
 import gg.grounds.push.tasks.GroundsTestLocalTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.UnknownProjectException
 import org.gradle.jvm.tasks.Jar
 
 class GroundsPushPlugin : Plugin<Project> {
@@ -28,6 +31,17 @@ class GroundsPushPlugin : Plugin<Project> {
             t.projectDirectory.set(target.layout.projectDirectory)
             t.bundleOutputFile.set(
                 target.layout.buildDirectory.file("grounds-push/bundle.tar.gz"),
+            )
+            // GitHub release downloads survive across `gradle clean` —
+            // they live in the Gradle user home cache, not the per-
+            // project build dir. Same convention Gradle itself uses
+            // for module dependencies.
+            t.bundleCacheDir.set(
+                target.layout.dir(
+                    target.providers.provider {
+                        target.gradle.gradleUserHomeDir.resolve("caches/grounds-push")
+                    },
+                ),
             )
             t.force.convention(false)
         }
@@ -64,12 +78,7 @@ class GroundsPushPlugin : Plugin<Project> {
         // exists by then. Both push and testLocal benefit from the same wiring.
         target.afterEvaluate { p ->
             if (!ext.jarFile.isPresent) {
-                val autoJarTask = listOf(
-                    "shadowJar",   // com.gradleup.shadow, io.github.goooler.shadow, johnrengelman.shadow
-                    "jar",
-                ).firstNotNullOfOrNull { name ->
-                    p.tasks.findByName(name) as? Jar
-                }
+                val autoJarTask = findJarTask(p)
                 if (autoJarTask != null) {
                     pushTask.configure { t -> t.autoDetectedJarFile.set(autoJarTask.archiveFile) }
                     pushTask.configure { t -> t.dependsOn(autoJarTask) }
@@ -77,6 +86,59 @@ class GroundsPushPlugin : Plugin<Project> {
                         t.jarFile.set(autoJarTask.archiveFile)
                         t.dependsOn(autoJarTask)
                     }
+                }
+            }
+
+            // Multi-plugin bundle: if grounds.yaml lists `plugins:` with
+            // `:foo`-style Gradle project refs, look each one up now and
+            // wire dependsOn + plumb the Jar task's archiveFile into the
+            // task. We do this here (config-time) so users don't have to
+            // hand-write `tasks.named("groundsPush") { dependsOn(":foo:jar") }`.
+            wireGradleProjectPluginRefs(p, pushTask)
+        }
+    }
+
+    private fun findJarTask(p: Project): Jar? = listOf(
+        "shadowJar", // com.gradleup.shadow, io.github.goooler.shadow, johnrengelman.shadow
+        "jar",
+    ).firstNotNullOfOrNull { name -> p.tasks.findByName(name) as? Jar }
+
+    private fun wireGradleProjectPluginRefs(
+        p: Project,
+        pushTask: org.gradle.api.tasks.TaskProvider<GroundsPushTask>,
+    ) {
+        val manifestFile = p.layout.projectDirectory.file("grounds.yaml").asFile
+        if (!manifestFile.isFile) return
+
+        val pluginEntries = try {
+            GroundsYamlParser.parse(manifestFile).plugins ?: return
+        } catch (_: GroundsYamlParseException) {
+            // Don't fail apply() on a malformed manifest — the task action
+            // re-parses and surfaces the error there with proper context.
+            return
+        }
+
+        for (entry in pluginEntries.filter { it.startsWith(":") }) {
+            val sub = try {
+                p.project(entry)
+            } catch (_: UnknownProjectException) {
+                throw IllegalStateException(
+                    "grounds-push: grounds.yaml plugins[] references Gradle project '$entry' " +
+                        "but no such project is included. Add it to settings.gradle(.kts).",
+                )
+            }
+            // Sub-project's Jar task may not exist yet (its build.gradle
+            // hasn't run). evaluationDependsOn would force it but is the
+            // long-deprecated lever; afterEvaluate of `sub` is the modern
+            // way. We bind into the subproject's afterEvaluate to find
+            // the Jar task once it's been registered.
+            sub.afterEvaluate { subP ->
+                val jarTask = findJarTask(subP) ?: throw IllegalStateException(
+                    "grounds-push: project '$entry' has no shadowJar/jar task to bundle.",
+                )
+                pushTask.configure { t ->
+                    t.dependsOn(jarTask)
+                    t.gradleProjectArtifacts.put(entry, jarTask.archiveFile)
                 }
             }
         }
