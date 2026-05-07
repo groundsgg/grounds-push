@@ -4,15 +4,24 @@ import gg.grounds.push.bundle.PluginBundler
 import gg.grounds.push.client.*
 import gg.grounds.push.manifest.GroundsYamlParseException
 import gg.grounds.push.manifest.GroundsYamlParser
+import gg.grounds.push.source.GitHubReleaseFetchException
+import gg.grounds.push.source.GitHubReleaseFetcher
+import gg.grounds.push.source.SourceRef
+import gg.grounds.push.source.SourceRefParseException
+import gg.grounds.push.source.SourceRefParser
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFile
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
 import org.gradle.api.tasks.options.Option
@@ -38,6 +47,13 @@ abstract class GroundsPushTask : DefaultTask() {
      *  manifest declares `plugins:`). Lives under the project's
      *  buildDirectory so it gets cleaned with `gradle clean`. */
     @get:Internal abstract val bundleOutputFile: RegularFileProperty
+    /** Cache directory for GitHub release downloads. Convention is
+     *  `<gradleUserHome>/caches/grounds-push/`. */
+    @get:Internal abstract val bundleCacheDir: DirectoryProperty
+    /** Pre-resolved Jar archive paths for `:gradle-project`-style
+     *  plugins[] entries. Wired from the plugin's afterEvaluate so the
+     *  task action only has to look up by project path. */
+    @get:Internal abstract val gradleProjectArtifacts: MapProperty<String, RegularFile>
 
     @get:Internal
     abstract val overrideTarget: Property<String>
@@ -60,20 +76,21 @@ abstract class GroundsPushTask : DefaultTask() {
         }
 
         // Two upload shapes:
-        //   1. plugins: [a.jar, b.jar, ...] in the manifest → tar.gz
-        //      bundle, multi-plugin server (forge detects gzip magic).
+        //   1. plugins: [...] in the manifest → tar.gz bundle, mixed
+        //      sources (local paths, :gradle-project refs, github
+        //      releases). Forge detects gzip magic and unpacks.
         //   2. single jar (autoDetected, ext.jarFile, or manifest.jar)
         //      → existing path.
         val manifestPlugins = manifest.plugins
-        val artifact: File = if (manifestPlugins != null) {
-            val resolved = manifestPlugins.map { p ->
-                val f = projectDirectory.file(p).get().asFile
-                if (!f.isFile) throw GradleException(
-                    "grounds-push: plugin entry not found at ${f.absolutePath} " +
-                        "(grounds.yaml plugins[]). Did the build task run for that subproject?"
-                )
-                f
+        val pluginSources: List<SourceRef> = manifestPlugins?.let {
+            try {
+                SourceRefParser.parseAll(it)
+            } catch (e: SourceRefParseException) {
+                throw GradleException("grounds-push: ${e.message}", e)
             }
+        } ?: emptyList()
+        val artifact: File = if (pluginSources.isNotEmpty()) {
+            val resolved = pluginSources.map { ref -> resolveSource(ref) }
             val bundleFile = bundleOutputFile.get().asFile
             try {
                 PluginBundler.bundle(resolved, bundleFile)
@@ -125,7 +142,7 @@ abstract class GroundsPushTask : DefaultTask() {
         logger.lifecycle(
             "[grounds-push] Artifact selected " +
                 "(name=${artifact.name}, size=${humanSize(artifact.length())}, " +
-                "shape=${if (manifestPlugins != null) "bundle(${manifestPlugins.size})" else "single-jar"}, " +
+                "shape=${if (pluginSources.isNotEmpty()) "bundle(${pluginSources.size})" else "single-jar"}, " +
                 "target=$resolvedTarget, apiUrl=$resolvedApiUrl)"
         )
 
@@ -145,6 +162,11 @@ abstract class GroundsPushTask : DefaultTask() {
                     r.cpu?.let { put("cpu", JsonPrimitive(it)) }
                     r.memory?.let { put("memory", JsonPrimitive(it)) }
                 })
+            }
+            if (pluginSources.isNotEmpty()) {
+                // Forge re-validates owner=groundsgg + tag pin-shape on
+                // every github source as defense-in-depth.
+                put("pluginSources", buildJsonArray { pluginSources.forEach { add(it.toJson()) } })
             }
         })
 
@@ -288,6 +310,59 @@ abstract class GroundsPushTask : DefaultTask() {
         val body = errorBody ?: return false
         return listOfNotNull(body.error, body.reason, body.message)
             .any { it.contains("whitelist", ignoreCase = true) }
+    }
+
+    private fun resolveSource(ref: SourceRef): File = when (ref) {
+        is SourceRef.Local -> {
+            val f = projectDirectory.file(ref.path).get().asFile
+            if (ref.isAbsolute) {
+                logger.lifecycle(
+                    "[grounds-push] Note: '${ref.raw}' is an absolute path — manifest is non-portable across machines",
+                )
+            }
+            if (!f.isFile) throw GradleException(
+                "grounds-push: plugin entry not found at ${f.absolutePath} (grounds.yaml plugins[]).",
+            )
+            f
+        }
+        is SourceRef.GradleProject -> {
+            val mapped = gradleProjectArtifacts.get()[ref.projectPath]?.asFile
+                ?: throw GradleException(
+                    "grounds-push: Gradle project '${ref.projectPath}' was not wired at configuration time. " +
+                        "This usually means the subproject's afterEvaluate hadn't run when the manifest was inspected — " +
+                        "ensure the subproject applies a Jar-producing plugin (`java`, shadow, etc.).",
+                )
+            if (!mapped.isFile) throw GradleException(
+                "grounds-push: archive for '${ref.projectPath}' not found at ${mapped.absolutePath} — was the jar task allowed to run?",
+            )
+            mapped
+        }
+        is SourceRef.GitHubRelease -> {
+            val cacheDir = bundleCacheDir.get().asFile
+            val token = System.getenv("GITHUB_TOKEN")?.takeIf { it.isNotBlank() }
+            try {
+                GitHubReleaseFetcher().fetch(ref, cacheDir, token, logger::lifecycle)
+            } catch (e: GitHubReleaseFetchException) {
+                throw GradleException("grounds-push: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun SourceRef.toJson(): JsonObject = buildJsonObject {
+        when (this@toJson) {
+            is SourceRef.Local -> put("kind", JsonPrimitive("local"))
+            is SourceRef.GradleProject -> {
+                put("kind", JsonPrimitive("gradle-project"))
+                put("project", JsonPrimitive(projectPath))
+            }
+            is SourceRef.GitHubRelease -> {
+                put("kind", JsonPrimitive("github"))
+                put("owner", JsonPrimitive(owner))
+                put("repo", JsonPrimitive(repo))
+                put("tag", JsonPrimitive(tag))
+                asset?.let { put("asset", JsonPrimitive(it)) }
+            }
+        }
     }
 
     private companion object {
