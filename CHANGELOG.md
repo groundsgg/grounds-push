@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/groundsgg/grounds-push/compare/v0.6.0...v0.7.0) (2026-05-07)
+
+
+### Features
+
+* **plugin:** plugins[] supports Gradle projects + GitHub releases ([#21](https://github.com/groundsgg/grounds-push/issues/21)) ([1654296](https://github.com/groundsgg/grounds-push/commit/16542965b41e9409a721afc3458350328a5b8d6f))
+
 ## [0.6.0](https://github.com/groundsgg/grounds-push/compare/v0.5.1...v0.6.0) (2026-05-07)
 
 
