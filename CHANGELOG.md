@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/groundsgg/grounds-push/compare/v0.5.1...v0.6.0) (2026-05-07)
+
+
+### Features
+
+* **plugin:** multi-plugin bundles via plugins[] manifest field ([#19](https://github.com/groundsgg/grounds-push/issues/19)) ([f375a17](https://github.com/groundsgg/grounds-push/commit/f375a17b1a464470181863b6c43004dbcd0cb101))
+
 ## [0.5.1](https://github.com/groundsgg/grounds-push/compare/v0.5.0...v0.5.1) (2026-05-06)
 
 
