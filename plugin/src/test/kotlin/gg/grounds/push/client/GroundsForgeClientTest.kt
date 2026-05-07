@@ -53,6 +53,26 @@ class GroundsForgeClientTest {
     }
 
     @Test
+    fun `createPush sends application gzip when uploading tar gz bundle`(@TempDir tmp: File) {
+        server.enqueue(MockResponse().setResponseCode(202).setBody(
+            """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""
+        ))
+        val bundle = File(tmp, "bundle.tar.gz")
+        // gzip header magic — server-side magic-byte check is the
+        // contract under test; the multipart Content-Type is
+        // cosmetic and inspected separately below.
+        bundle.writeBytes(byteArrayOf(0x1f, 0x8b.toByte()) + ByteArray(50))
+        client.createPush("{}", "dev", bundle)
+
+        val recorded = server.takeRequest()
+        val body = recorded.body.readUtf8()
+        assertTrue(
+            body.contains("Content-Type: application/gzip"),
+            "expected application/gzip part in multipart body, got:\n$body",
+        )
+    }
+
+    @Test
     fun `client normalizes trailing slash in api url`(@TempDir tmp: File) {
         server.enqueue(MockResponse().setResponseCode(202).setBody(
             """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""
