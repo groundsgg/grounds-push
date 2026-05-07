@@ -247,7 +247,10 @@ class GroundsPushPluginTest {
                 .build()
 
             assertTrue(result.output.contains("Credentials resolved (source="), result.output)
-            assertTrue(result.output.contains("Artifact selected (jarName=app.jar, size=104 B, target=staging"), result.output)
+            assertTrue(
+                result.output.contains("Artifact selected (name=app.jar, size=104 B, shape=single-jar, target=staging"),
+                result.output,
+            )
             assertTrue(result.output.contains("Push accepted (pushId=p1, target=staging, statusCode=202, reused=false)"), result.output)
             assertTrue(result.output.contains("Build link available (pushId=p1, url=https://platform.grnds.io/builds/p1)"), result.output)
             assertTrue(result.output.contains("Build status received (pushId=p1, status=building"), result.output)
