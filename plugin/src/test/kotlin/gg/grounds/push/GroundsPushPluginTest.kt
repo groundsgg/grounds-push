@@ -11,6 +11,29 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
+/**
+ * Mirrors the OS-conditional path resolution in `CredentialResolver`
+ * so TestKit-driven `groundsPush` runs find the JSON file we just
+ * wrote regardless of which platform the test suite is running on.
+ *
+ * Without this the macOS builds wrote to `<tmp>/.config/grounds/`
+ * (XDG layout) while the resolver, picking up the macOS branch,
+ * looked under `<tmp>/Library/Application Support/grounds/` and
+ * surfaced "No credentials found" — four locally-flaky failures
+ * carried across many sessions.
+ */
+private fun credentialsFileFor(homeRoot: File): File {
+    val os = System.getProperty("os.name").lowercase()
+    return when {
+        os.contains("mac") || os.contains("darwin") ->
+            File(homeRoot, "Library/Application Support/grounds/credentials.json")
+        os.contains("win") ->
+            File(homeRoot, "AppData/Roaming/grounds/credentials.json")
+        else ->
+            File(homeRoot, ".config/grounds/credentials.json")
+    }
+}
+
 class GroundsPushPluginTest {
     @Test
     fun `plugin registers groundsPush, groundsPushRetry, groundsPromote tasks`(@TempDir tmp: File) {
@@ -135,7 +158,7 @@ class GroundsPushPluginTest {
                     id("gg.grounds.push")
                 }
             """.trimIndent())
-            val credentials = File(tmp, ".config/grounds/credentials.json")
+            val credentials = credentialsFileFor(tmp)
             credentials.parentFile.mkdirs()
             credentials.writeText(
                 """{"version":1,"apiUrl":"${server.url("/").toString().removeSuffix("/")}","accessToken":"token"}"""
@@ -181,7 +204,7 @@ class GroundsPushPluginTest {
                     failOnWhitelistError.set(false)
                 }
             """.trimIndent())
-            val credentials = File(tmp, ".config/grounds/credentials.json")
+            val credentials = credentialsFileFor(tmp)
             credentials.parentFile.mkdirs()
             credentials.writeText("""{"version":1,"accessToken":"token"}""")
 
@@ -236,7 +259,7 @@ class GroundsPushPluginTest {
                     target.set("staging")
                 }
             """.trimIndent())
-            val credentials = File(tmp, ".config/grounds/credentials.json")
+            val credentials = credentialsFileFor(tmp)
             credentials.parentFile.mkdirs()
             credentials.writeText("""{"version":1,"accessToken":"token"}""")
 
@@ -293,7 +316,7 @@ class GroundsPushPluginTest {
                     jarFile.set(layout.projectDirectory.file("app.jar"))
                 }
             """.trimIndent())
-            val credentials = File(tmp, ".config/grounds/credentials.json")
+            val credentials = credentialsFileFor(tmp)
             credentials.parentFile.mkdirs()
             credentials.writeText("""{"version":1,"accessToken":"token"}""")
 
