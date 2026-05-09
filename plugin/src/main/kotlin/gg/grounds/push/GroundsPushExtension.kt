@@ -17,6 +17,8 @@ abstract class GroundsPushExtension @Inject constructor(objects: ObjectFactory) 
     abstract val timeoutMinutes: Property<Int>
     abstract val connectTimeoutSeconds: Property<Int>
     abstract val failOnWhitelistError: Property<Boolean>
+    /** Base-image catalog validation mode: warn, strict, or off. */
+    abstract val baseImageCatalogMode: Property<String>
 
     /** `groundsTestLocal` override — Paper version. Defaults to 1.21.4 (matches forge baseImage). */
     abstract val paperVersion: Property<String>
@@ -27,5 +29,6 @@ abstract class GroundsPushExtension @Inject constructor(objects: ObjectFactory) 
         timeoutMinutes.convention(5)
         connectTimeoutSeconds.convention(20)
         failOnWhitelistError.convention(true)
+        baseImageCatalogMode.convention("warn")
     }
 }

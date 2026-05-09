@@ -2,6 +2,8 @@ package gg.grounds.push.tasks
 
 import gg.grounds.push.bundle.PluginBundler
 import gg.grounds.push.client.*
+import gg.grounds.push.manifest.BaseImageCatalogValidationException
+import gg.grounds.push.manifest.BaseImageCatalogValidator
 import gg.grounds.push.manifest.GroundsYamlParseException
 import gg.grounds.push.manifest.GroundsYamlParser
 import gg.grounds.push.source.GitHubReleaseFetchException
@@ -42,6 +44,7 @@ abstract class GroundsPushTask : DefaultTask() {
     @get:Input abstract val timeoutMinutes: Property<Int>
     @get:Input abstract val connectTimeoutSeconds: Property<Int>
     @get:Input abstract val failOnWhitelistError: Property<Boolean>
+    @get:Input abstract val baseImageCatalogMode: Property<String>
     @get:Internal abstract val projectDirectory: DirectoryProperty
     /** Output location for multi-plugin tar.gz bundles (only used when
      *  manifest declares `plugins:`). Lives under the project's
@@ -153,6 +156,8 @@ abstract class GroundsPushTask : DefaultTask() {
             callTimeout = Duration.ofMinutes(timeoutMinutes.get().toLong()),
         )
 
+        validateBaseImageCatalog(client, manifest.type, manifest.baseImage)
+
         val manifestJson = Json.encodeToString(JsonObject.serializer(), buildJsonObject {
             put("name", JsonPrimitive(manifest.name))
             put("type", JsonPrimitive(manifest.type))
@@ -198,6 +203,36 @@ abstract class GroundsPushTask : DefaultTask() {
         }
 
         streamAndWait(client, push.pushId, resolvedTarget)
+    }
+
+    private fun validateBaseImageCatalog(client: GroundsForgeClient, type: String, baseImage: String) {
+        when (val mode = baseImageCatalogMode.get().lowercase()) {
+            "off" -> logger.lifecycle("[grounds-push] Base image catalog validation skipped (mode=off)")
+            "warn", "strict" -> {
+                try {
+                    BaseImageCatalogValidator.validate(
+                        client.listBaseImages(),
+                        type = type,
+                        baseImage = baseImage,
+                    )
+                    logger.lifecycle("[grounds-push] Base image catalog validated (type=$type, baseImage=$baseImage)")
+                } catch (e: BaseImageCatalogValidationException) {
+                    throw GradleException(e.message!!, e)
+                } catch (e: Exception) {
+                    if (mode == "strict") {
+                        throw GradleException(
+                            "grounds-push: failed to fetch base image catalog in strict mode (${e.message})",
+                            e,
+                        )
+                    }
+                    logger.warn(
+                        "[grounds-push] Base image catalog unavailable " +
+                            "(mode=warn, reason=${e.message ?: e::class.java.simpleName})",
+                    )
+                }
+            }
+            else -> throw GradleException("grounds-push: baseImageCatalogMode must be warn, strict, or off, got '$mode'")
+        }
     }
 
     private fun streamAndWait(client: GroundsForgeClient, pushId: String, target: String) {
