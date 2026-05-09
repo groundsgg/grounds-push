@@ -183,6 +183,7 @@ class GroundsPushPluginTest {
         val server = MockWebServer()
         server.start()
         try {
+            server.enqueue(catalogResponse())
             server.enqueue(MockResponse().setResponseCode(403).setBody(
                 """{"error":"not_whitelisted","message":"plugin is not whitelisted for this target"}"""
             ))
@@ -215,6 +216,7 @@ class GroundsPushPluginTest {
                 .build()
 
             assertTrue(result.output.contains("Push skipped"), result.output)
+            assertEquals("/v1/base-images", server.takeRequest(5, TimeUnit.SECONDS)?.path)
             val request = server.takeRequest(5, TimeUnit.SECONDS)
             assertNotNull(request, "expected push request")
             assertEquals("/v1/pushes", request.path)
@@ -228,6 +230,7 @@ class GroundsPushPluginTest {
         val server = MockWebServer()
         server.start()
         try {
+            server.enqueue(catalogResponse())
             server.enqueue(MockResponse().setResponseCode(202).setBody(
                 """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs","buildUrl":"https://platform.grnds.io/builds/p1"}"""
             ))
@@ -292,6 +295,7 @@ class GroundsPushPluginTest {
         val server = MockWebServer()
         server.start()
         try {
+            server.enqueue(catalogResponse())
             server.enqueue(MockResponse().setResponseCode(202).setBody(
                 """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""
             ))
@@ -327,6 +331,7 @@ class GroundsPushPluginTest {
                 .build()
 
             assertTrue(result.output.contains("Build succeeded (pushId=p1, imageTag=zot/test:abc)"), result.output)
+            assertEquals("/v1/base-images", server.takeRequest(5, TimeUnit.SECONDS)?.path)
             assertEquals("/v1/pushes", server.takeRequest(5, TimeUnit.SECONDS)?.path)
             assertEquals("/v1/pushes/p1/logs", server.takeRequest(5, TimeUnit.SECONDS)?.path)
             assertEquals("/v1/pushes/p1", server.takeRequest(5, TimeUnit.SECONDS)?.path)
@@ -334,4 +339,9 @@ class GroundsPushPluginTest {
             server.shutdown()
         }
     }
+
+    private fun catalogResponse(): MockResponse =
+        MockResponse().setResponseCode(200).setBody(
+            """{"items":[{"key":"paper","displayName":"Paper","manifestType":"plugin-paper","image":"ghcr.io/groundsgg/paper","versions":[{"version":"0.8.2","selectable":true}]}]}"""
+        )
 }

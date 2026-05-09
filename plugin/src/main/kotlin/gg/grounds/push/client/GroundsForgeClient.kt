@@ -112,6 +112,18 @@ class GroundsForgeClient(
         }
     }
 
+    fun listBaseImages(): BaseImageCatalog {
+        val req = Request.Builder()
+            .url("$apiUrl/v1/base-images")
+            .get()
+            .build()
+        httpClient.newCall(req).execute().use { resp ->
+            val raw = resp.body.string()
+            if (resp.code == 200) return json.decodeFromString(BaseImageCatalog.serializer(), raw)
+            throw toApiException(resp.code, raw)
+        }
+    }
+
     /**
      * Opens an SSE connection. Returns an EventSource the caller can cancel.
      * The listener is invoked on OkHttp's dispatcher thread — callers should

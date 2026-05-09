@@ -28,6 +28,7 @@ class GroundsPushPlugin : Plugin<Project> {
             t.timeoutMinutes.set(ext.timeoutMinutes)
             t.connectTimeoutSeconds.set(ext.connectTimeoutSeconds)
             t.failOnWhitelistError.set(ext.failOnWhitelistError)
+            t.baseImageCatalogMode.set(ext.baseImageCatalogMode)
             t.projectDirectory.set(target.layout.projectDirectory)
             t.bundleOutputFile.set(
                 target.layout.buildDirectory.file("grounds-push/bundle.tar.gz"),

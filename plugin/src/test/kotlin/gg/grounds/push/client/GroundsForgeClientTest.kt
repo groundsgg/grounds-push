@@ -136,6 +136,18 @@ class GroundsForgeClientTest {
     }
 
     @Test
+    fun `listBaseImages 200 parses catalog`() {
+        server.enqueue(MockResponse().setBody(
+            """{"items":[{"key":"paper","displayName":"Paper","manifestType":"plugin-paper","image":"ghcr.io/groundsgg/paper","versions":[{"version":"0.8.2","selectable":true}]}]}"""
+        ))
+
+        val catalog = client.listBaseImages()
+
+        assertEquals("paper", catalog.items.single().key)
+        assertEquals("/v1/base-images", server.takeRequest().path)
+    }
+
+    @Test
     fun `streamLogs receives status and done events`() {
         val sseBody = "event: status\ndata: {\"status\":\"building\"}\n\n" +
             "event: log\ndata: {\"ts\":\"2026-04-24T10:00:00Z\",\"line\":\"INFO: Executing Kaniko build\"}\n\n" +

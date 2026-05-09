@@ -60,7 +60,7 @@ Schema:
 | --- | --- | --- |
 | `name` | yes | Grounds component name. |
 | `type` | yes | One of `gamemode`, `plugin-paper`, `plugin-velocity`, or `service`. |
-| `baseImage` | yes | One of `paper`, `velocity`, `minestom`, or `service`. |
+| `baseImage` | yes | Logical base-image key from Forge's runtime catalog, for example `paper`, `velocity`, or `paper@0.8.2` for an explicit selectable version. |
 | `jar` | no | JAR path relative to the project root. Defaults to `build/libs/*.jar`. If `groundsPush.jarFile` is not set, a non-default `jar` value is used before auto-detected `shadowJar`/`jar` outputs. Mutually exclusive with `plugins`. |
 | `plugins` | no | List of 2..10 JAR paths bundled into one Paper/Velocity/gamemode server. See *Multi-plugin bundles* below. Forbidden for `type: service`. |
 | `target` | no | `dev` or `staging`. The Gradle extension and `--target` option override this value. |
@@ -78,8 +78,13 @@ groundsPush {
     timeoutMinutes.set(5)
     connectTimeoutSeconds.set(20)
     failOnWhitelistError.set(true)
+    baseImageCatalogMode.set("warn")
 }
 ```
+
+`baseImageCatalogMode` controls local catalog validation before upload:
+`warn` validates when the catalog is reachable and continues on catalog lookup
+errors, `strict` fails on lookup errors, and `off` skips the preflight.
 
 `groundsPush.jarFile` is the highest-priority JAR override. If it is not set,
 the plugin uses a non-default `jar` from `grounds.yaml`, then falls back to an
