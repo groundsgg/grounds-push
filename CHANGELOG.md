@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/groundsgg/grounds-push/compare/v0.7.0...v0.8.0) (2026-05-09)
+
+
+### Features
+
+* **push:** validate base images from catalog ([#24](https://github.com/groundsgg/grounds-push/issues/24)) ([c830292](https://github.com/groundsgg/grounds-push/commit/c8302929a2d2a2f6eb5a9756cf66392d56299f87))
+
 ## [0.7.0](https://github.com/groundsgg/grounds-push/compare/v0.6.0...v0.7.0) (2026-05-07)
 
 
