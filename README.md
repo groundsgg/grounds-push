@@ -56,16 +56,16 @@ resources:
 
 Schema:
 
-| Field | Required | Description |
-| --- | --- | --- |
-| `name` | yes | Grounds component name. |
-| `type` | yes | One of `gamemode`, `plugin-paper`, `plugin-velocity`, or `service`. |
-| `baseImage` | yes | Logical base-image key from Forge's runtime catalog, for example `paper`, `velocity`, or `paper@0.8.2` for an explicit selectable version. |
-| `jar` | no | JAR path relative to the project root. Defaults to `build/libs/*.jar`. If `groundsPush.jarFile` is not set, a non-default `jar` value is used before auto-detected `shadowJar`/`jar` outputs. Mutually exclusive with `plugins`. |
-| `plugins` | no | List of 2..10 plugin entries bundled into one Paper/Velocity/gamemode server. Entries may be legacy source strings or structured objects with `id`, optional `variant`, and `source`. See *Multi-plugin bundles* below. Forbidden for `type: service`. |
-| `target` | no | `dev` or `staging`. The Gradle extension and `--target` option override this value. |
-| `resources.cpu` | no | Requested CPU, for example `500m`. |
-| `resources.memory` | no | Requested memory, for example `512Mi`. |
+| Field              | Required | Description                                                                                                                                                                                                                                            |
+|--------------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `name`             | yes      | Grounds component name.                                                                                                                                                                                                                                |
+| `type`             | yes      | One of `gamemode`, `plugin-paper`, `plugin-velocity`, or `service`.                                                                                                                                                                                    |
+| `baseImage`        | yes      | Logical base-image key from Forge's runtime catalog, for example `paper`, `velocity`, or `paper@0.8.2` for an explicit selectable version.                                                                                                             |
+| `jar`              | no       | JAR path relative to the project root. Defaults to `build/libs/*.jar`. If `groundsPush.jarFile` is not set, a non-default `jar` value is used before auto-detected `shadowJar`/`jar` outputs. Mutually exclusive with `plugins`.                       |
+| `plugins`          | no       | List of 2..10 plugin entries bundled into one Paper/Velocity/gamemode server. Entries may be legacy source strings or structured objects with `id`, optional `variant`, and `source`. See *Multi-plugin bundles* below. Forbidden for `type: service`. |
+| `target`           | no       | `dev` or `staging`. The Gradle extension and `--target` option override this value.                                                                                                                                                                    |
+| `resources.cpu`    | no       | Requested CPU, for example `500m`.                                                                                                                                                                                                                     |
+| `resources.memory` | no       | Requested memory, for example `512Mi`.                                                                                                                                                                                                                 |
 
 Optional Gradle configuration:
 
@@ -127,7 +127,7 @@ uses `source` for bundling. `id` and `variant` do not affect the Forge upload.
 The plugin packs the listed JARs into a tar.gz that grounds-forge
 forwards to the build pipeline. They land at `/app/plugins/` in
 manifest order (numeric prefix preserves load order). Limits: 2..10
-plugins, 100 MB total upload, no `service` type.
+plugins, 150 MB total upload, no `service` type.
 
 For dependent build tasks set `groundsPush.dependsOn(...)` per
 sub-project so each JAR exists before push:
@@ -197,12 +197,12 @@ automates this flow.
 
 ## Common failures
 
-| Symptom | Fix |
-| --- | --- |
-| `No credentials found` | Set `GROUNDS_TOKEN`, or create credentials with `grounds login` once the CLI is available. |
-| `Token expired` | Refresh credentials with `grounds login`, or export a fresh `GROUNDS_TOKEN`. |
-| `JAR not found` | Run the build task, set `groundsPush.jarFile`, or set `jar` in `grounds.yaml` to the produced artifact. |
-| `target must be 'dev' or 'staging'` | Use `target: dev`, `target: staging`, or `./gradlew groundsPush --target=staging`. |
-| `JAR is ... exceeding the 100 MB cap` | Trim bundled dependencies or ask the platform team whether the cap should be raised. |
-| `not_whitelisted` | Request access for the component/target. For non-blocking local workflows, set `failOnWhitelistError.set(false)`. |
+| Symptom                                | Fix                                                                                                                                  |
+|----------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| `No credentials found`                 | Set `GROUNDS_TOKEN`, or create credentials with `grounds login` once the CLI is available.                                           |
+| `Token expired`                        | Refresh credentials with `grounds login`, or export a fresh `GROUNDS_TOKEN`.                                                         |
+| `JAR not found`                        | Run the build task, set `groundsPush.jarFile`, or set `jar` in `grounds.yaml` to the produced artifact.                              |
+| `target must be 'dev' or 'staging'`    | Use `target: dev`, `target: staging`, or `./gradlew groundsPush --target=staging`.                                                   |
+| `JAR is ... exceeding the 150 MB cap`  | Trim bundled dependencies or ask the platform team whether the cap should be raised.                                                 |
+| `not_whitelisted`                      | Request access for the component/target. For non-blocking local workflows, set `failOnWhitelistError.set(false)`.                    |
 | `stream closed and status poll failed` | Retry after checking the logged `pushId`, `statusCode`, and `reason`; if it persists, include those fields when reporting the issue. |
