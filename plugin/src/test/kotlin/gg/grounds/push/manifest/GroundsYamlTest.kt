@@ -155,8 +155,6 @@ class GroundsYamlTest {
         assertEquals("build/libs/foo.jar", legacy.source)
 
         val structured = plugins[1] as GroundsYaml.PluginEntry.Structured
-        assertEquals("plugin-chat", structured.id)
-        assertEquals("paper", structured.variant)
         assertEquals("github:groundsgg/plugin-chat@v1.2.3:plugin-chat.jar", structured.source)
     }
 

@@ -105,24 +105,24 @@ plugins:
   - sub-projects/teams/build/libs/teams.jar
 ```
 
-Structured entries are also supported when a plugin identity or variant
-needs to travel with the source:
+Each `plugins:` entry should be a source string:
 
 ```yaml
 name: combo
 type: plugin-paper
 baseImage: paper
 plugins:
-  - id: plugin-chat
-    variant: paper
-    source: github:groundsgg/plugin-chat@v1.2.3:plugin-chat.jar
-  - id: plugin-permissions
-    source: :plugin-permissions
+  - github:groundsgg/plugin-chat@v1.2.3:plugin-chat.jar
+  - :plugin-permissions
 ```
 
 Supported `source` forms are local JAR paths, `:gradle-project` references,
 and pinned GitHub release refs such as
 `github:groundsgg/plugin-chat@v1.2.3:plugin-chat.jar`.
+
+Structured entries with `id`, optional `variant`, and `source` are accepted for
+manifests shared with the Grounds CLI workspace resolver, but grounds-push only
+uses `source` for bundling. `id` and `variant` do not affect the Forge upload.
 
 The plugin packs the listed JARs into a tar.gz that grounds-forge
 forwards to the build pipeline. They land at `/app/plugins/` in

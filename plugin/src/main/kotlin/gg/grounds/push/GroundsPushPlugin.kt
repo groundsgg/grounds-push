@@ -113,7 +113,7 @@ class GroundsPushPlugin : Plugin<Project> {
     ) {
         val entries = (
             gradleProjectRefsFromManifest(p) +
-                gradleProjectRefsFromResolvedPluginsFile(p, pushTask.get())
+                gradleProjectRefsFromResolvedPluginsFile(p)
             ).toSet()
 
         for (entry in entries) {
@@ -157,11 +157,10 @@ class GroundsPushPlugin : Plugin<Project> {
         return pluginEntries.map { it.source }.filter { it.startsWith(":") }
     }
 
-    private fun gradleProjectRefsFromResolvedPluginsFile(p: Project, task: GroundsPushTask): List<String> {
-        val resolvedPluginsFile = task.resolvedPluginsFile.orNull?.asFile
-            // Gradle applies @Option values too late for dependency wiring during afterEvaluate.
-            // Read the task request args directly so resolved project refs can still add dependsOn edges.
-            ?: resolvedPluginsFileFromCommandLine(p)
+    private fun gradleProjectRefsFromResolvedPluginsFile(p: Project): List<String> {
+        // Gradle applies @Option values too late for dependency wiring during afterEvaluate.
+        // Read the task request args directly so resolved project refs can still add dependsOn edges.
+        val resolvedPluginsFile = resolvedPluginsFileFromCommandLine(p)
             ?: return emptyList()
         if (!resolvedPluginsFile.isFile) return emptyList()
 

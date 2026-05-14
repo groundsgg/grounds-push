@@ -28,11 +28,7 @@ data class GroundsYaml(
 
         data class Legacy(override val source: String) : PluginEntry
 
-        data class Structured(
-            val id: String,
-            val variant: String? = null,
-            override val source: String,
-        ) : PluginEntry
+        data class Structured(override val source: String) : PluginEntry
     }
 }
 
@@ -134,9 +130,11 @@ object GroundsYamlParser {
                     GroundsYaml.PluginEntry.Legacy(item)
                 }
                 is Map<*, *> -> {
+                    // id/variant are consumed by the CLI workspace resolver. The Gradle plugin
+                    // validates the shared schema but only needs source for bundling.
+                    item.requirePluginString(key, "id")
+                    item.optPluginString(key, "variant")
                     GroundsYaml.PluginEntry.Structured(
-                        id = item.requirePluginString(key, "id"),
-                        variant = item.optPluginString(key, "variant"),
                         source = item.requirePluginString(key, "source"),
                     )
                 }
