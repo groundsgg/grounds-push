@@ -2,14 +2,17 @@ package gg.grounds.push
 
 import gg.grounds.push.manifest.GroundsYamlParseException
 import gg.grounds.push.manifest.GroundsYamlParser
+import gg.grounds.push.source.ResolvedPluginSources
 import gg.grounds.push.tasks.GroundsPromoteTask
 import gg.grounds.push.tasks.GroundsPushRetryTask
 import gg.grounds.push.tasks.GroundsPushTask
 import gg.grounds.push.tasks.GroundsTestLocalTask
+import kotlinx.serialization.SerializationException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.UnknownProjectException
 import org.gradle.jvm.tasks.Jar
+import java.io.File
 
 class GroundsPushPlugin : Plugin<Project> {
     override fun apply(target: Project) {
@@ -108,23 +111,17 @@ class GroundsPushPlugin : Plugin<Project> {
         p: Project,
         pushTask: org.gradle.api.tasks.TaskProvider<GroundsPushTask>,
     ) {
-        val manifestFile = p.layout.projectDirectory.file("grounds.yaml").asFile
-        if (!manifestFile.isFile) return
+        val entries = (
+            gradleProjectRefsFromManifest(p) +
+                gradleProjectRefsFromResolvedPluginsFile(p, pushTask.get())
+            ).toSet()
 
-        val pluginEntries = try {
-            GroundsYamlParser.parse(manifestFile).plugins ?: return
-        } catch (_: GroundsYamlParseException) {
-            // Don't fail apply() on a malformed manifest — the task action
-            // re-parses and surfaces the error there with proper context.
-            return
-        }
-
-        for (entry in pluginEntries.map { it.source }.filter { it.startsWith(":") }) {
+        for (entry in entries) {
             val sub = try {
                 p.project(entry)
             } catch (_: UnknownProjectException) {
                 throw IllegalStateException(
-                    "grounds-push: grounds.yaml plugins[] references Gradle project '$entry' " +
+                    "grounds-push: plugin source references Gradle project '$entry' " +
                         "but no such project is included. Add it to settings.gradle(.kts).",
                 )
             }
@@ -143,5 +140,57 @@ class GroundsPushPlugin : Plugin<Project> {
                 }
             }
         }
+    }
+
+    private fun gradleProjectRefsFromManifest(p: Project): List<String> {
+        val manifestFile = p.layout.projectDirectory.file("grounds.yaml").asFile
+        if (!manifestFile.isFile) return emptyList()
+
+        val pluginEntries = try {
+            GroundsYamlParser.parse(manifestFile).plugins ?: return emptyList()
+        } catch (_: GroundsYamlParseException) {
+            // Don't fail apply() on a malformed manifest — the task action
+            // re-parses and surfaces the error there with proper context.
+            return emptyList()
+        }
+
+        return pluginEntries.map { it.source }.filter { it.startsWith(":") }
+    }
+
+    private fun gradleProjectRefsFromResolvedPluginsFile(p: Project, task: GroundsPushTask): List<String> {
+        val resolvedPluginsFile = task.resolvedPluginsFile.orNull?.asFile
+            // Gradle applies @Option values too late for dependency wiring during afterEvaluate.
+            // Read the task request args directly so resolved project refs can still add dependsOn edges.
+            ?: resolvedPluginsFileFromCommandLine(p)
+            ?: return emptyList()
+        if (!resolvedPluginsFile.isFile) return emptyList()
+
+        val resolvedPlugins = try {
+            ResolvedPluginSources.parse(resolvedPluginsFile)
+        } catch (_: SerializationException) {
+            return emptyList()
+        } catch (_: IllegalArgumentException) {
+            return emptyList()
+        }
+
+        return resolvedPlugins.plugins.mapNotNull { it.source }.filter { it.startsWith(":") }
+    }
+
+    private fun resolvedPluginsFileFromCommandLine(p: Project): File? {
+        val args = p.gradle.startParameter.taskRequests.flatMap { it.args }
+        args.forEachIndexed { index, arg ->
+            when {
+                arg.startsWith("--resolved-plugins-file=") ->
+                    return resolveProjectFile(p, arg.substringAfter("="))
+                arg == "--resolved-plugins-file" && index + 1 < args.size ->
+                    return resolveProjectFile(p, args[index + 1])
+            }
+        }
+        return null
+    }
+
+    private fun resolveProjectFile(p: Project, path: String): File {
+        val file = File(path)
+        return if (file.isAbsolute) file else p.layout.projectDirectory.file(path).asFile
     }
 }

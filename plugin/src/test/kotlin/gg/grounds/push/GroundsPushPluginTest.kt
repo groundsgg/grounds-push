@@ -464,6 +464,78 @@ class GroundsPushPluginTest {
         }
     }
 
+    @Test
+    fun `groundsPush wires resolved Gradle project plugin refs without manifest plugin entry`(@TempDir tmp: File) {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(catalogResponse())
+            server.enqueue(MockResponse().setResponseCode(200).setBody(
+                """{"pushId":"p1","status":"build_succeeded","reused":true,"logsUrl":null}"""
+            ))
+            File(tmp, "settings.gradle.kts").writeText("""
+                rootProject.name = "test"
+                include(":plugin")
+            """.trimIndent())
+            File(tmp, "plugin").mkdirs()
+            File(tmp, "plugin/build.gradle.kts").writeText("""
+                plugins {
+                    id("java")
+                }
+            """.trimIndent())
+            val companionJar = File(tmp, "companion.jar").also {
+                it.writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04) + "COMPANION".toByteArray())
+            }
+            val resolvedPlugins = File(tmp, "resolved-plugins.json").also {
+                it.writeText("""
+                    {
+                      "plugins": [
+                        {"id":"plugin","variant":"paper","source":":plugin"},
+                        {"id":"companion","variant":"paper","localPath":"${companionJar.absolutePath}"}
+                      ]
+                    }
+                """.trimIndent())
+            }
+            File(tmp, "grounds.yaml").writeText("""
+                name: test-plugin
+                type: plugin-paper
+                baseImage: paper
+            """.trimIndent())
+            File(tmp, "build.gradle.kts").writeText("""
+                plugins {
+                    id("gg.grounds.push")
+                }
+
+                groundsPush {
+                    apiUrl.set("${server.url("/").toString().removeSuffix("/")}")
+                }
+            """.trimIndent())
+            val credentials = credentialsFileFor(tmp)
+            credentials.parentFile.mkdirs()
+            credentials.writeText("""{"version":1,"accessToken":"token"}""")
+
+            GradleRunner.create()
+                .withProjectDir(tmp)
+                .withPluginClasspath()
+                .withArguments(
+                    "-Duser.home=${tmp.absolutePath}",
+                    "groundsPush",
+                    "--resolved-plugins-file=${resolvedPlugins.absolutePath}",
+                )
+                .build()
+
+            assertEquals("/v1/base-images", server.takeRequest(5, TimeUnit.SECONDS)?.path)
+            val request = server.takeRequest(5, TimeUnit.SECONDS)
+            assertNotNull(request, "expected push request")
+            assertEquals("/v1/pushes", request.path)
+            val boundary = request.getHeader("Content-Type")!!.substringAfter("boundary=")
+            val jarPart = multipartPart(request.body.readByteArray(), boundary, "jar")
+            assertEquals(listOf("plugins/00-plugin.jar", "plugins/01-companion.jar"), tarGzEntryNames(jarPart))
+        } finally {
+            server.shutdown()
+        }
+    }
+
     private fun catalogResponse(): MockResponse =
         MockResponse().setResponseCode(200).setBody(
             """{"items":[{"key":"paper","displayName":"Paper","manifestType":"plugin-paper","image":"ghcr.io/groundsgg/paper","versions":[{"version":"0.8.2","selectable":true}]}]}"""
