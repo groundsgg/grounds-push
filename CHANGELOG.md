@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/groundsgg/grounds-push/compare/v0.8.0...v0.9.0) (2026-05-14)
+
+
+### Features
+
+* upload effective plugin sources ([#26](https://github.com/groundsgg/grounds-push/issues/26)) ([1b9809c](https://github.com/groundsgg/grounds-push/commit/1b9809cd1c052edf856042a8193b4f05b843fb55))
+
 ## [0.8.0](https://github.com/groundsgg/grounds-push/compare/v0.7.0...v0.8.0) (2026-05-09)
 
 
