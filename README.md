@@ -127,7 +127,7 @@ uses `source` for bundling. `id` and `variant` do not affect the Forge upload.
 The plugin packs the listed JARs into a tar.gz that grounds-forge
 forwards to the build pipeline. They land at `/app/plugins/` in
 manifest order (numeric prefix preserves load order). Limits: 2..10
-plugins, 50 MB total upload, no `service` type.
+plugins, 100 MB total upload, no `service` type.
 
 For dependent build tasks set `groundsPush.dependsOn(...)` per
 sub-project so each JAR exists before push:
@@ -203,6 +203,6 @@ automates this flow.
 | `Token expired` | Refresh credentials with `grounds login`, or export a fresh `GROUNDS_TOKEN`. |
 | `JAR not found` | Run the build task, set `groundsPush.jarFile`, or set `jar` in `grounds.yaml` to the produced artifact. |
 | `target must be 'dev' or 'staging'` | Use `target: dev`, `target: staging`, or `./gradlew groundsPush --target=staging`. |
-| `JAR is ... exceeding the 50 MB cap` | Trim bundled dependencies or ask the platform team whether the cap should be raised. |
+| `JAR is ... exceeding the 100 MB cap` | Trim bundled dependencies or ask the platform team whether the cap should be raised. |
 | `not_whitelisted` | Request access for the component/target. For non-blocking local workflows, set `failOnWhitelistError.set(false)`. |
 | `stream closed and status poll failed` | Retry after checking the logged `pushId`, `statusCode`, and `reason`; if it persists, include those fields when reporting the issue. |
