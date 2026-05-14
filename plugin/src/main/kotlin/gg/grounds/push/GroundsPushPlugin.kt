@@ -119,7 +119,7 @@ class GroundsPushPlugin : Plugin<Project> {
             return
         }
 
-        for (entry in pluginEntries.filter { it.startsWith(":") }) {
+        for (entry in pluginEntries.map { it.source }.filter { it.startsWith(":") }) {
             val sub = try {
                 p.project(entry)
             } catch (_: UnknownProjectException) {
