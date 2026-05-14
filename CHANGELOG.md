@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/groundsgg/grounds-push/compare/v0.9.0...v0.9.1) (2026-05-14)
+
+
+### Bug Fixes
+
+* raise upload cap to 100mb ([#28](https://github.com/groundsgg/grounds-push/issues/28)) ([1817053](https://github.com/groundsgg/grounds-push/commit/18170534ab166ee8bd63fba48368e29bb45d8475))
+
 ## [0.9.0](https://github.com/groundsgg/grounds-push/compare/v0.8.0...v0.9.0) (2026-05-14)
 
 
