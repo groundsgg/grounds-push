@@ -1,10 +1,13 @@
 package gg.grounds.push
 
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.gradle.testkit.runner.GradleRunner
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
@@ -32,6 +35,29 @@ private fun credentialsFileFor(homeRoot: File): File {
         else ->
             File(homeRoot, ".config/grounds/credentials.json")
     }
+}
+
+private fun multipartPart(body: ByteArray, boundary: String, name: String): ByteArray {
+    val text = body.toString(Charsets.ISO_8859_1)
+    val headerStart = text.indexOf("""Content-Disposition: form-data; name="$name"""")
+    require(headerStart >= 0) { "multipart part '$name' not found" }
+    val dataStart = text.indexOf("\r\n\r\n", headerStart)
+    require(dataStart >= 0) { "multipart part '$name' has no data separator" }
+    val nextBoundary = text.indexOf("\r\n--$boundary", dataStart + 4)
+    require(nextBoundary >= 0) { "multipart part '$name' has no closing boundary" }
+    return body.copyOfRange(dataStart + 4, nextBoundary)
+}
+
+private fun tarGzEntryNames(bytes: ByteArray): List<String> {
+    val names = mutableListOf<String>()
+    TarArchiveInputStream(GzipCompressorInputStream(ByteArrayInputStream(bytes))).use { tar ->
+        var entry = tar.nextEntry
+        while (entry != null) {
+            names += entry.name
+            entry = tar.nextEntry
+        }
+    }
+    return names
 }
 
 class GroundsPushPluginTest {
@@ -335,6 +361,176 @@ class GroundsPushPluginTest {
             assertEquals("/v1/pushes", server.takeRequest(5, TimeUnit.SECONDS)?.path)
             assertEquals("/v1/pushes/p1/logs", server.takeRequest(5, TimeUnit.SECONDS)?.path)
             assertEquals("/v1/pushes/p1", server.takeRequest(5, TimeUnit.SECONDS)?.path)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `groundsPush bundles resolved localPath plugins and uploads sanitized effective plugin sources`(@TempDir tmp: File) {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(catalogResponse())
+            server.enqueue(MockResponse().setResponseCode(200).setBody(
+                """{"pushId":"p1","status":"build_succeeded","reused":true,"logsUrl":null}"""
+            ))
+            File(tmp, "settings.gradle.kts").writeText("rootProject.name = \"test\"\n")
+            val chatJar = File(tmp, "plugin-chat.jar").also {
+                it.writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04) + "CHAT".toByteArray())
+            }
+            val permissionsJar = File(tmp, "plugin-permissions.jar").also {
+                it.writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04) + "PERMISSIONS".toByteArray())
+            }
+            val resolvedPlugins = File(tmp, "resolved-plugins.json").also {
+                it.writeText("""
+                    {
+                      "plugins": [
+                        {"id":"plugin-chat","variant":"paper","localPath":"${chatJar.absolutePath}"},
+                        {"id":"plugin-permissions","variant":"paper","localPath":"${permissionsJar.absolutePath}"}
+                      ],
+                      "effectivePluginSources": [
+                        {
+                          "id":"plugin-chat",
+                          "variant":"paper",
+                          "effective":"local",
+                          "defaultSource":"github:groundsgg/plugin-chat@v1.2.3:plugin-chat.jar",
+                          "localPath":"${chatJar.absolutePath}",
+                          "artifactName":"plugin-chat.jar",
+                          "artifactSha256":"${"a".repeat(64)}",
+                          "git":{"remote":"groundsgg/plugin-chat","commit":"abcdef1","dirty":true}
+                        },
+                        {
+                          "id":"plugin-permissions",
+                          "variant":"paper",
+                          "effective":"local",
+                          "localPath":"${permissionsJar.absolutePath}",
+                          "artifactName":"plugin-permissions.jar",
+                          "artifactSha256":"${"b".repeat(64)}"
+                        }
+                      ]
+                    }
+                """.trimIndent())
+            }
+            File(tmp, "grounds.yaml").writeText("""
+                name: test-plugin
+                type: plugin-paper
+                baseImage: paper
+            """.trimIndent())
+            File(tmp, "build.gradle.kts").writeText("""
+                plugins {
+                    id("gg.grounds.push")
+                }
+
+                groundsPush {
+                    apiUrl.set("${server.url("/").toString().removeSuffix("/")}")
+                }
+            """.trimIndent())
+            val credentials = credentialsFileFor(tmp)
+            credentials.parentFile.mkdirs()
+            credentials.writeText("""{"version":1,"accessToken":"token"}""")
+
+            GradleRunner.create()
+                .withProjectDir(tmp)
+                .withPluginClasspath()
+                .withArguments(
+                    "-Duser.home=${tmp.absolutePath}",
+                    "groundsPush",
+                    "--resolved-plugins-file=${resolvedPlugins.absolutePath}",
+                )
+                .build()
+
+            assertEquals("/v1/base-images", server.takeRequest(5, TimeUnit.SECONDS)?.path)
+            val request = server.takeRequest(5, TimeUnit.SECONDS)
+            assertNotNull(request, "expected push request")
+            assertEquals("/v1/pushes", request.path)
+            val boundary = request.getHeader("Content-Type")!!.substringAfter("boundary=")
+            val body = request.body.readByteArray()
+            val bodyText = body.toString(Charsets.ISO_8859_1)
+            assertTrue(!bodyText.contains(chatJar.absolutePath), bodyText)
+            assertTrue(!bodyText.contains(permissionsJar.absolutePath), bodyText)
+            val effectiveSources = multipartPart(body, boundary, "effectivePluginSources").toString(Charsets.UTF_8)
+            assertTrue(effectiveSources.contains("plugin-chat"), effectiveSources)
+            assertTrue(!effectiveSources.contains(chatJar.absolutePath), effectiveSources)
+            assertTrue(!effectiveSources.contains(permissionsJar.absolutePath), effectiveSources)
+
+            val jarPart = multipartPart(body, boundary, "jar")
+            assertEquals(
+                listOf("plugins/00-plugin-chat.jar", "plugins/01-plugin-permissions.jar"),
+                tarGzEntryNames(jarPart),
+            )
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `groundsPush wires resolved Gradle project plugin refs without manifest plugin entry`(@TempDir tmp: File) {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(catalogResponse())
+            server.enqueue(MockResponse().setResponseCode(200).setBody(
+                """{"pushId":"p1","status":"build_succeeded","reused":true,"logsUrl":null}"""
+            ))
+            File(tmp, "settings.gradle.kts").writeText("""
+                rootProject.name = "test"
+                include(":plugin")
+            """.trimIndent())
+            File(tmp, "plugin").mkdirs()
+            File(tmp, "plugin/build.gradle.kts").writeText("""
+                plugins {
+                    id("java")
+                }
+            """.trimIndent())
+            val companionJar = File(tmp, "companion.jar").also {
+                it.writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04) + "COMPANION".toByteArray())
+            }
+            val resolvedPlugins = File(tmp, "resolved-plugins.json").also {
+                it.writeText("""
+                    {
+                      "plugins": [
+                        {"id":"plugin","variant":"paper","source":":plugin"},
+                        {"id":"companion","variant":"paper","localPath":"${companionJar.absolutePath}"}
+                      ]
+                    }
+                """.trimIndent())
+            }
+            File(tmp, "grounds.yaml").writeText("""
+                name: test-plugin
+                type: plugin-paper
+                baseImage: paper
+            """.trimIndent())
+            File(tmp, "build.gradle.kts").writeText("""
+                plugins {
+                    id("gg.grounds.push")
+                }
+
+                groundsPush {
+                    apiUrl.set("${server.url("/").toString().removeSuffix("/")}")
+                }
+            """.trimIndent())
+            val credentials = credentialsFileFor(tmp)
+            credentials.parentFile.mkdirs()
+            credentials.writeText("""{"version":1,"accessToken":"token"}""")
+
+            GradleRunner.create()
+                .withProjectDir(tmp)
+                .withPluginClasspath()
+                .withArguments(
+                    "-Duser.home=${tmp.absolutePath}",
+                    "groundsPush",
+                    "--resolved-plugins-file=${resolvedPlugins.absolutePath}",
+                )
+                .build()
+
+            assertEquals("/v1/base-images", server.takeRequest(5, TimeUnit.SECONDS)?.path)
+            val request = server.takeRequest(5, TimeUnit.SECONDS)
+            assertNotNull(request, "expected push request")
+            assertEquals("/v1/pushes", request.path)
+            val boundary = request.getHeader("Content-Type")!!.substringAfter("boundary=")
+            val jarPart = multipartPart(request.body.readByteArray(), boundary, "jar")
+            assertEquals(listOf("plugins/00-plugin.jar", "plugins/01-companion.jar"), tarGzEntryNames(jarPart))
         } finally {
             server.shutdown()
         }

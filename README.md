@@ -62,7 +62,7 @@ Schema:
 | `type` | yes | One of `gamemode`, `plugin-paper`, `plugin-velocity`, or `service`. |
 | `baseImage` | yes | Logical base-image key from Forge's runtime catalog, for example `paper`, `velocity`, or `paper@0.8.2` for an explicit selectable version. |
 | `jar` | no | JAR path relative to the project root. Defaults to `build/libs/*.jar`. If `groundsPush.jarFile` is not set, a non-default `jar` value is used before auto-detected `shadowJar`/`jar` outputs. Mutually exclusive with `plugins`. |
-| `plugins` | no | List of 2..10 JAR paths bundled into one Paper/Velocity/gamemode server. See *Multi-plugin bundles* below. Forbidden for `type: service`. |
+| `plugins` | no | List of 2..10 plugin entries bundled into one Paper/Velocity/gamemode server. Entries may be legacy source strings or structured objects with `id`, optional `variant`, and `source`. See *Multi-plugin bundles* below. Forbidden for `type: service`. |
 | `target` | no | `dev` or `staging`. The Gradle extension and `--target` option override this value. |
 | `resources.cpu` | no | Requested CPU, for example `500m`. |
 | `resources.memory` | no | Requested memory, for example `512Mi`. |
@@ -93,7 +93,7 @@ auto-detected `shadowJar` or `jar` task output.
 ## Multi-plugin bundles
 
 Test several plugins together on a single Paper / Velocity / gamemode
-server by listing their JARs in `plugins:`:
+server by listing plugin source strings in `plugins:`:
 
 ```yaml
 name: combo
@@ -104,6 +104,25 @@ plugins:
   - sub-projects/chat/build/libs/chat.jar
   - sub-projects/teams/build/libs/teams.jar
 ```
+
+Each `plugins:` entry should be a source string:
+
+```yaml
+name: combo
+type: plugin-paper
+baseImage: paper
+plugins:
+  - github:groundsgg/plugin-chat@v1.2.3:plugin-chat.jar
+  - :plugin-permissions
+```
+
+Supported `source` forms are local JAR paths, `:gradle-project` references,
+and pinned GitHub release refs such as
+`github:groundsgg/plugin-chat@v1.2.3:plugin-chat.jar`.
+
+Structured entries with `id`, optional `variant`, and `source` are accepted for
+manifests shared with the Grounds CLI workspace resolver, but grounds-push only
+uses `source` for bundling. `id` and `variant` do not affect the Forge upload.
 
 The plugin packs the listed JARs into a tar.gz that grounds-forge
 forwards to the build pipeline. They land at `/app/plugins/` in

@@ -8,12 +8,14 @@ import gg.grounds.push.manifest.GroundsYamlParseException
 import gg.grounds.push.manifest.GroundsYamlParser
 import gg.grounds.push.source.GitHubReleaseFetchException
 import gg.grounds.push.source.GitHubReleaseFetcher
+import gg.grounds.push.source.ResolvedPluginSource
+import gg.grounds.push.source.ResolvedPluginSources
 import gg.grounds.push.source.SourceRef
 import gg.grounds.push.source.SourceRefParseException
 import gg.grounds.push.source.SourceRefParser
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -40,6 +42,7 @@ abstract class GroundsPushTask : DefaultTask() {
     @get:InputFile @get:PathSensitive(PathSensitivity.RELATIVE) abstract val manifestFile: RegularFileProperty
     @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.RELATIVE) abstract val jarFile: RegularFileProperty
     @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.RELATIVE) abstract val autoDetectedJarFile: RegularFileProperty
+    @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.NONE) abstract val resolvedPluginsFile: RegularFileProperty
     @get:Input @get:Optional abstract val target: Property<String>
     @get:Input abstract val timeoutMinutes: Property<Int>
     @get:Input abstract val connectTimeoutSeconds: Property<Int>
@@ -70,12 +73,29 @@ abstract class GroundsPushTask : DefaultTask() {
     @Option(option = "force", description = "Skip reuse-by-contentHash and force a fresh build")
     fun setForceOption(v: Boolean) { force.set(v) }
 
+    @Option(option = "resolved-plugins-file", description = "Path to CLI-resolved plugin sources JSON")
+    fun setResolvedPluginsFileOption(path: String) {
+        val file = File(path)
+        resolvedPluginsFile.fileValue(
+            if (file.isAbsolute) file else projectDirectory.file(path).get().asFile,
+        )
+    }
+
     @TaskAction
     fun run() {
         val manifest = try {
             GroundsYamlParser.parse(manifestFile.get().asFile)
         } catch (e: GroundsYamlParseException) {
             throw GradleException(e.message!!, e)
+        }
+        val resolvedPlugins = resolvedPluginsFile.orNull?.asFile?.let { file ->
+            try {
+                ResolvedPluginSources.parse(file)
+            } catch (e: SerializationException) {
+                throw GradleException("grounds-push: failed to parse resolved plugins file ${file.absolutePath}: ${e.message}", e)
+            } catch (e: IllegalArgumentException) {
+                throw GradleException("grounds-push: failed to parse resolved plugins file ${file.absolutePath}: ${e.message}", e)
+            }
         }
 
         // Two upload shapes:
@@ -84,15 +104,37 @@ abstract class GroundsPushTask : DefaultTask() {
         //      releases). Forge detects gzip magic and unpacks.
         //   2. single jar (autoDetected, ext.jarFile, or manifest.jar)
         //      → existing path.
-        val manifestPlugins = manifest.plugins
-        val pluginSources: List<SourceRef> = manifestPlugins?.let {
+        val manifestPluginSources = manifest.plugins?.map { it.source }
+        val pluginSources: List<SourceRef> = if (resolvedPlugins != null) {
+            resolvedPlugins.plugins.mapNotNull { entry ->
+                entry.source?.takeIf { it.isNotBlank() }?.let { source ->
+                    try {
+                        SourceRefParser.parse(source)
+                    } catch (e: SourceRefParseException) {
+                        throw GradleException("grounds-push: resolved plugins file entry '${entry.id}': ${e.message}", e)
+                    }
+                }
+            }
+        } else {
+            manifestPluginSources?.let {
+                try {
+                    SourceRefParser.parseAll(it)
+                } catch (e: SourceRefParseException) {
+                    throw GradleException("grounds-push: ${e.message}", e)
+                }
+            } ?: emptyList()
+        }
+        val bundleEntryCount = resolvedPlugins?.plugins?.size ?: pluginSources.size
+        val artifact: File = if (resolvedPlugins != null) {
+            val resolved = resolvedPlugins.plugins.map { entry -> resolveResolvedPluginSource(entry) }
+            val bundleFile = bundleOutputFile.get().asFile
             try {
-                SourceRefParser.parseAll(it)
-            } catch (e: SourceRefParseException) {
+                PluginBundler.bundle(resolved, bundleFile)
+            } catch (e: IllegalArgumentException) {
                 throw GradleException("grounds-push: ${e.message}", e)
             }
-        } ?: emptyList()
-        val artifact: File = if (pluginSources.isNotEmpty()) {
+            bundleFile
+        } else if (pluginSources.isNotEmpty()) {
             val resolved = pluginSources.map { ref -> resolveSource(ref) }
             val bundleFile = bundleOutputFile.get().asFile
             try {
@@ -145,7 +187,7 @@ abstract class GroundsPushTask : DefaultTask() {
         logger.lifecycle(
             "[grounds-push] Artifact selected " +
                 "(name=${artifact.name}, size=${humanSize(artifact.length())}, " +
-                "shape=${if (pluginSources.isNotEmpty()) "bundle(${pluginSources.size})" else "single-jar"}, " +
+                "shape=${if (bundleEntryCount > 0) "bundle($bundleEntryCount)" else "single-jar"}, " +
                 "target=$resolvedTarget, apiUrl=$resolvedApiUrl)"
         )
 
@@ -174,9 +216,18 @@ abstract class GroundsPushTask : DefaultTask() {
                 put("pluginSources", buildJsonArray { pluginSources.forEach { add(it.toJson()) } })
             }
         })
+        val effectivePluginSourcesJson = resolvedPlugins?.let {
+            ResolvedPluginSources.json.encodeToString(it.effectivePluginSources)
+        }
 
         val push = try {
-            client.createPush(manifestJson, resolvedTarget, artifact, force = force.get())
+            client.createPush(
+                manifestJson,
+                resolvedTarget,
+                artifact,
+                force = force.get(),
+                effectivePluginSourcesJson = effectivePluginSourcesJson,
+            )
         } catch (e: GroundsForgeClient.ApiException) {
             if (!failOnWhitelistError.get() && e.isWhitelistError()) {
                 logger.warn(
@@ -203,6 +254,36 @@ abstract class GroundsPushTask : DefaultTask() {
         }
 
         streamAndWait(client, push.pushId, resolvedTarget)
+    }
+
+    private fun resolveResolvedPluginSource(entry: ResolvedPluginSource): File {
+        val localPath = entry.localPath?.takeIf { it.isNotBlank() }
+        val source = entry.source?.takeIf { it.isNotBlank() }
+        if ((localPath == null) == (source == null)) {
+            throw GradleException(
+                "grounds-push: resolved plugins file entry '${entry.id}' must set exactly one of localPath or source",
+            )
+        }
+        if (localPath != null) {
+            val file = File(localPath)
+            if (!file.isAbsolute) {
+                throw GradleException(
+                    "grounds-push: resolved plugins file entry '${entry.id}' localPath must be absolute",
+                )
+            }
+            if (!file.isFile) {
+                throw GradleException(
+                    "grounds-push: resolved plugins file entry '${entry.id}' not found at ${file.absolutePath}",
+                )
+            }
+            return file
+        }
+        val ref = try {
+            SourceRefParser.parse(source!!)
+        } catch (e: SourceRefParseException) {
+            throw GradleException("grounds-push: resolved plugins file entry '${entry.id}': ${e.message}", e)
+        }
+        return resolveSource(ref)
     }
 
     private fun validateBaseImageCatalog(client: GroundsForgeClient, type: String, baseImage: String) {

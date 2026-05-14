@@ -73,6 +73,21 @@ class GroundsForgeClientTest {
     }
 
     @Test
+    fun `createPush sends effective plugin sources when provided`(@TempDir tmp: File) {
+        server.enqueue(MockResponse().setResponseCode(202).setBody(
+            """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""
+        ))
+        val effectivePluginSourcesJson = """[{"id":"plugin-chat","effective":"local"}]"""
+
+        client.createPush("{}", "dev", fakeJar(tmp), effectivePluginSourcesJson = effectivePluginSourcesJson)
+
+        val recorded = server.takeRequest()
+        val body = recorded.body.readUtf8()
+        assertTrue(body.contains("""name="effectivePluginSources""""), body)
+        assertTrue(body.contains(effectivePluginSourcesJson), body)
+    }
+
+    @Test
     fun `client normalizes trailing slash in api url`(@TempDir tmp: File) {
         server.enqueue(MockResponse().setResponseCode(202).setBody(
             """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""

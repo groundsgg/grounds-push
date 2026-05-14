@@ -134,7 +134,28 @@ class GroundsYamlTest {
               - build/libs/foo.jar
               - build/libs/bar.jar
         """.trimIndent())
-        assertEquals(listOf("build/libs/foo.jar", "build/libs/bar.jar"), m.plugins)
+        assertEquals(listOf("build/libs/foo.jar", "build/libs/bar.jar"), m.plugins?.map { it.source })
+    }
+
+    @Test
+    fun `parses plugins as legacy strings and structured entries`() {
+        val m = parse("""
+            name: combo
+            type: plugin-paper
+            baseImage: paper
+            plugins:
+              - build/libs/foo.jar
+              - id: plugin-chat
+                variant: paper
+                source: github:groundsgg/plugin-chat@v1.2.3:plugin-chat.jar
+        """.trimIndent())
+
+        val plugins = m.plugins ?: error("expected plugins")
+        val legacy = plugins[0] as GroundsYaml.PluginEntry.Legacy
+        assertEquals("build/libs/foo.jar", legacy.source)
+
+        val structured = plugins[1] as GroundsYaml.PluginEntry.Structured
+        assertEquals("github:groundsgg/plugin-chat@v1.2.3:plugin-chat.jar", structured.source)
     }
 
     @Test

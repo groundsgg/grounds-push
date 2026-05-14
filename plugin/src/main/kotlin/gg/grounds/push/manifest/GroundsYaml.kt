@@ -17,11 +17,19 @@ data class GroundsYaml(
      * `type: service` — services are single-jar workloads with their
      * own ENTRYPOINT.
      */
-    val plugins: List<String>? = null,
+    val plugins: List<PluginEntry>? = null,
     val target: String? = null,    // optional — plugin extension's target wins when set
     val resources: Resources? = null,
 ) {
     data class Resources(val cpu: String? = null, val memory: String? = null)
+
+    sealed interface PluginEntry {
+        val source: String
+
+        data class Legacy(override val source: String) : PluginEntry
+
+        data class Structured(override val source: String) : PluginEntry
+    }
 }
 
 class GroundsYamlParseException(
@@ -50,7 +58,7 @@ object GroundsYamlParser {
         val type = raw.requireString("type")
         val baseImage = raw.requireString("baseImage")
         val rawJar = raw.optString("jar")
-        val plugins = raw.optStringList("plugins")
+        val plugins = raw.optPluginEntries("plugins")
         if (plugins != null) {
             if (rawJar != null) throw GroundsYamlParseException(
                 "grounds.yaml: 'plugins' and 'jar' are mutually exclusive — pick one",
@@ -108,16 +116,54 @@ object GroundsYamlParser {
         return v.ifEmpty { null }
     }
 
-    private fun Map<*, *>.optStringList(key: String): List<String>? {
+    private fun Map<*, *>.optPluginEntries(key: String): List<GroundsYaml.PluginEntry>? {
         val v = this[key] ?: return null
         if (v !is List<*>) throw GroundsYamlParseException(
-            "grounds.yaml: field '$key' must be a sequence of strings, got ${v.javaClass.simpleName}",
+            "grounds.yaml: field '$key' must be a sequence of strings or mappings, got ${v.javaClass.simpleName}",
         )
         return v.map { item ->
-            if (item !is String || item.isEmpty()) throw GroundsYamlParseException(
-                "grounds.yaml: field '$key' entries must be non-empty strings",
-            )
-            item
+            when (item) {
+                is String -> {
+                    if (item.isEmpty()) throw GroundsYamlParseException(
+                        "grounds.yaml: field '$key' entries must be non-empty strings",
+                    )
+                    GroundsYaml.PluginEntry.Legacy(item)
+                }
+                is Map<*, *> -> {
+                    // id/variant are consumed by the CLI workspace resolver. The Gradle plugin
+                    // validates the shared schema but only needs source for bundling.
+                    item.requirePluginString(key, "id")
+                    item.optPluginString(key, "variant")
+                    GroundsYaml.PluginEntry.Structured(
+                        source = item.requirePluginString(key, "source"),
+                    )
+                }
+                else -> throw GroundsYamlParseException(
+                    "grounds.yaml: field '$key' entries must be non-empty strings or mappings",
+                )
+            }
         }
+    }
+
+    private fun Map<*, *>.requirePluginString(parent: String, key: String): String {
+        val v = this[key]
+            ?: throw GroundsYamlParseException(
+                "grounds.yaml: field '$parent' structured entries must include '$key'",
+            )
+        if (v !is String) throw GroundsYamlParseException(
+            "grounds.yaml: field '$parent.$key' must be a string, got ${v.javaClass.simpleName}",
+        )
+        if (v.isEmpty()) throw GroundsYamlParseException(
+            "grounds.yaml: field '$parent.$key' must not be empty",
+        )
+        return v
+    }
+
+    private fun Map<*, *>.optPluginString(parent: String, key: String): String? {
+        val v = this[key] ?: return null
+        if (v !is String) throw GroundsYamlParseException(
+            "grounds.yaml: field '$parent.$key' must be a string, got ${v.javaClass.simpleName}",
+        )
+        return v.ifEmpty { null }
     }
 }
