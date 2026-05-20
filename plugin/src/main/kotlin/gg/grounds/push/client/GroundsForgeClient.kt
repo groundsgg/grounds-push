@@ -50,6 +50,7 @@ class GroundsForgeClient(
         target: String,
         jarFile: File,
         force: Boolean = false,
+        flavor: String? = null,
         effectivePluginSourcesJson: String? = null,
     ): CreatePushResponse {
         // Multi-plugin bundles ship as tar.gz; the server detects the
@@ -71,6 +72,9 @@ class GroundsForgeClient(
                 "jar", jarFile.name,
                 jarFile.asRequestBody(contentType),
             )
+        if (!flavor.isNullOrBlank()) {
+            bodyBuilder.addFormDataPart("flavor", flavor)
+        }
         if (effectivePluginSourcesJson != null) {
             bodyBuilder.addFormDataPart(
                 "effectivePluginSources",

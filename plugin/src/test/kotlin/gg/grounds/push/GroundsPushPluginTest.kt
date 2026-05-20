@@ -317,6 +317,142 @@ class GroundsPushPluginTest {
     }
 
     @Test
+    fun `groundsPush selects app flavor manifest and artifact`(@TempDir tmp: File) {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(catalogResponse())
+            server.enqueue(MockResponse().setResponseCode(200).setBody(
+                """{"pushId":"p1","status":"build_succeeded","reused":true,"logsUrl":null}"""
+            ))
+            File(tmp, "settings.gradle.kts").writeText("rootProject.name = \"test\"\n")
+            val paperJar = File(tmp, "paper.jar").also {
+                it.writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04) + "PAPER".toByteArray())
+            }
+            val velocityJar = File(tmp, "velocity.jar").also {
+                it.writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04) + "VELOCITY".toByteArray())
+            }
+            File(tmp, "grounds.yaml").writeText("""
+                name: plugin-config
+                flavors:
+                  paper:
+                    type: paper
+                    baseImage: paper
+                    jar: ${paperJar.name}
+                  velocity:
+                    type: velocity
+                    baseImage: velocity
+                    jar: ${velocityJar.name}
+            """.trimIndent())
+            File(tmp, "build.gradle.kts").writeText("""
+                plugins {
+                    id("gg.grounds.push")
+                }
+
+                groundsPush {
+                    apiUrl.set("${server.url("/").toString().removeSuffix("/")}")
+                }
+            """.trimIndent())
+            val credentials = credentialsFileFor(tmp)
+            credentials.parentFile.mkdirs()
+            credentials.writeText("""{"version":1,"accessToken":"token"}""")
+
+            GradleRunner.create()
+                .withProjectDir(tmp)
+                .withPluginClasspath()
+                .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPush", "--flavor=velocity")
+                .build()
+
+            assertEquals("/v1/base-images", server.takeRequest(5, TimeUnit.SECONDS)?.path)
+            val request = server.takeRequest(5, TimeUnit.SECONDS)
+            assertNotNull(request, "expected push request")
+            assertEquals("/v1/pushes", request.path)
+            val boundary = request.getHeader("Content-Type")!!.substringAfter("boundary=")
+            val body = request.body.readByteArray()
+            val manifest = multipartPart(body, boundary, "manifest").toString(Charsets.UTF_8)
+            assertTrue(manifest.contains(""""name":"plugin-config""""), manifest)
+            assertTrue(manifest.contains(""""type":"velocity""""), manifest)
+            assertTrue(manifest.contains(""""baseImage":"velocity""""), manifest)
+            assertEquals("velocity", multipartPart(body, boundary, "flavor").toString(Charsets.UTF_8))
+            assertTrue(multipartPart(body, boundary, "jar").toString(Charsets.ISO_8859_1).contains("VELOCITY"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `groundsPush wires Gradle project refs only for selected app flavor`(@TempDir tmp: File) {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(catalogResponse())
+            server.enqueue(MockResponse().setResponseCode(200).setBody(
+                """{"pushId":"p1","status":"build_succeeded","reused":true,"logsUrl":null}"""
+            ))
+            File(tmp, "settings.gradle.kts").writeText("""
+                rootProject.name = "test"
+                include(":app", ":velocity-plugin")
+            """.trimIndent())
+            File(tmp, "app").mkdirs()
+            File(tmp, "app/companion.jar").writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04) + "COMPANION".toByteArray())
+            File(tmp, "app/grounds.yaml").writeText("""
+                name: plugin-config
+                flavors:
+                  paper:
+                    type: paper
+                    baseImage: paper
+                    plugins:
+                      - id: paper-plugin
+                        source: :paper-plugin
+                      - id: companion
+                        source: companion.jar
+                  velocity:
+                    type: velocity
+                    baseImage: velocity
+                    plugins:
+                      - id: velocity-plugin
+                        source: :velocity-plugin
+                      - id: companion
+                        source: companion.jar
+            """.trimIndent())
+            File(tmp, "app/build.gradle.kts").writeText("""
+                plugins {
+                    id("gg.grounds.push")
+                }
+
+                groundsPush {
+                    apiUrl.set("${server.url("/").toString().removeSuffix("/")}")
+                }
+            """.trimIndent())
+            File(tmp, "velocity-plugin").mkdirs()
+            File(tmp, "velocity-plugin/build.gradle.kts").writeText("""
+                plugins {
+                    id("java")
+                }
+            """.trimIndent())
+            val credentials = credentialsFileFor(tmp)
+            credentials.parentFile.mkdirs()
+            credentials.writeText("""{"version":1,"accessToken":"token"}""")
+
+            GradleRunner.create()
+                .withProjectDir(tmp)
+                .withPluginClasspath()
+                .withArguments("-Duser.home=${tmp.absolutePath}", ":app:groundsPush", "--flavor=velocity")
+                .build()
+
+            assertEquals("/v1/base-images", server.takeRequest(5, TimeUnit.SECONDS)?.path)
+            val request = server.takeRequest(5, TimeUnit.SECONDS)
+            assertNotNull(request, "expected push request")
+            assertEquals("/v1/pushes", request.path)
+            val boundary = request.getHeader("Content-Type")!!.substringAfter("boundary=")
+            val jarPart = multipartPart(request.body.readByteArray(), boundary, "jar")
+            assertEquals(listOf("plugins/00-velocity-plugin.jar", "plugins/01-companion.jar"), tarGzEntryNames(jarPart))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun `groundsPush polls status after log stream transport failure`(@TempDir tmp: File) {
         val server = MockWebServer()
         server.start()
@@ -538,6 +674,6 @@ class GroundsPushPluginTest {
 
     private fun catalogResponse(): MockResponse =
         MockResponse().setResponseCode(200).setBody(
-            """{"items":[{"key":"paper","displayName":"Paper","manifestType":"plugin-paper","image":"ghcr.io/groundsgg/paper","versions":[{"version":"0.8.2","selectable":true}]}]}"""
+            """{"items":[{"key":"paper","displayName":"Paper","manifestType":"plugin-paper","image":"ghcr.io/groundsgg/paper","versions":[{"version":"0.8.2","selectable":true}]},{"key":"velocity","displayName":"Velocity","manifestType":"plugin-velocity","image":"ghcr.io/groundsgg/velocity","versions":[{"version":"0.8.2","selectable":true}]}]}"""
         )
 }

@@ -159,6 +159,65 @@ class GroundsYamlTest {
     }
 
     @Test
+    fun `parses app flavors`() {
+        val m = parse("""
+            name: plugin-config
+            flavors:
+              paper:
+                type: paper
+                baseImage: paper
+                jar: paper/build/libs/plugin-config-paper.jar
+                resources:
+                  memory: 2Gi
+              velocity:
+                type: velocity
+                baseImage: velocity
+                plugins:
+                  - velocity/build/libs/plugin-config.jar
+                  - velocity/build/libs/plugin-config-extra.jar
+        """.trimIndent())
+
+        assertNull(m.type)
+        assertNull(m.baseImage)
+        assertEquals("paper/build/libs/plugin-config-paper.jar", m.flavors?.get("paper")?.jar)
+        assertEquals("2Gi", m.flavors?.get("paper")?.resources?.memory)
+        assertEquals(
+            listOf("velocity/build/libs/plugin-config.jar", "velocity/build/libs/plugin-config-extra.jar"),
+            m.flavors?.get("velocity")?.plugins?.map { it.source },
+        )
+    }
+
+    @Test
+    fun `rejects app flavors combined with top-level runtime fields`() {
+        val e = assertThrows<GroundsYamlParseException> {
+            parse("""
+                name: plugin-config
+                type: paper
+                baseImage: paper
+                flavors:
+                  paper:
+                    type: paper
+                    baseImage: paper
+            """.trimIndent())
+        }
+        assert(e.message!!.contains("either top-level runtime fields or flavors")) { e.message!! }
+    }
+
+    @Test
+    fun `rejects invalid app flavor key`() {
+        val e = assertThrows<GroundsYamlParseException> {
+            parse("""
+                name: plugin-config
+                flavors:
+                  Paper:
+                    type: paper
+                    baseImage: paper
+            """.trimIndent())
+        }
+        assert(e.message!!.contains("flavor key")) { e.message!! }
+    }
+
+    @Test
     fun `rejects plugins with fewer than 2 entries`() {
         val e = assertThrows<GroundsYamlParseException> {
             parse("""
@@ -201,6 +260,39 @@ class GroundsYamlTest {
             """.trimIndent())
         }
         assert(e.message!!.contains("service")) { e.message!! }
+    }
+
+    @Test
+    fun `rejects plugins for type minestom`() {
+        val e = assertThrows<GroundsYamlParseException> {
+            parse("""
+                name: svc
+                type: minestom
+                baseImage: minestom
+                plugins:
+                  - build/libs/foo.jar
+                  - build/libs/bar.jar
+            """.trimIndent())
+        }
+        assert(e.message!!.contains("minestom")) { e.message!! }
+    }
+
+    @Test
+    fun `rejects flavor plugins for type minestom`() {
+        val e = assertThrows<GroundsYamlParseException> {
+            parse("""
+                name: svc
+                flavors:
+                  minestom:
+                    type: minestom
+                    baseImage: minestom
+                    plugins:
+                      - build/libs/foo.jar
+                      - build/libs/bar.jar
+            """.trimIndent())
+        }
+        assert(e.message!!.contains("flavors.minestom.plugins")) { e.message!! }
+        assert(e.message!!.contains("minestom")) { e.message!! }
     }
 
     @Test

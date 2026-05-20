@@ -4,6 +4,7 @@ import gg.grounds.push.bundle.PluginBundler
 import gg.grounds.push.client.*
 import gg.grounds.push.manifest.BaseImageCatalogValidationException
 import gg.grounds.push.manifest.BaseImageCatalogValidator
+import gg.grounds.push.manifest.GroundsYaml
 import gg.grounds.push.manifest.GroundsYamlParseException
 import gg.grounds.push.manifest.GroundsYamlParser
 import gg.grounds.push.source.GitHubReleaseFetchException
@@ -44,6 +45,7 @@ abstract class GroundsPushTask : DefaultTask() {
     @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.RELATIVE) abstract val autoDetectedJarFile: RegularFileProperty
     @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.NONE) abstract val resolvedPluginsFile: RegularFileProperty
     @get:Input @get:Optional abstract val target: Property<String>
+    @get:Input @get:Optional abstract val flavor: Property<String>
     @get:Input abstract val timeoutMinutes: Property<Int>
     @get:Input abstract val connectTimeoutSeconds: Property<Int>
     @get:Input abstract val failOnWhitelistError: Property<Boolean>
@@ -66,6 +68,12 @@ abstract class GroundsPushTask : DefaultTask() {
 
     @Option(option = "target", description = "Override target (dev|staging)")
     fun setTargetOption(v: String) { overrideTarget.set(v) }
+
+    @get:Internal
+    abstract val overrideFlavor: Property<String>
+
+    @Option(option = "flavor", description = "Select app flavor from grounds.yaml flavors")
+    fun setFlavorOption(v: String) { overrideFlavor.set(v) }
 
     @get:Internal
     abstract val force: Property<Boolean>
@@ -97,6 +105,12 @@ abstract class GroundsPushTask : DefaultTask() {
                 throw GradleException("grounds-push: failed to parse resolved plugins file ${file.absolutePath}: ${e.message}", e)
             }
         }
+        val selected = try {
+            selectManifestRuntime(manifest, overrideFlavor.orNull ?: flavor.orNull)
+        } catch (e: GroundsYamlParseException) {
+            throw GradleException(e.message!!, e)
+        }
+        val runtime = selected.runtime
 
         // Two upload shapes:
         //   1. plugins: [...] in the manifest → tar.gz bundle, mixed
@@ -104,7 +118,7 @@ abstract class GroundsPushTask : DefaultTask() {
         //      releases). Forge detects gzip magic and unpacks.
         //   2. single jar (autoDetected, ext.jarFile, or manifest.jar)
         //      → existing path.
-        val manifestPluginSources = manifest.plugins?.map { it.source }
+        val manifestPluginSources = runtime.plugins?.map { it.source }
         val pluginSources: List<SourceRef> = if (resolvedPlugins != null) {
             resolvedPlugins.plugins.mapNotNull { entry ->
                 entry.source?.takeIf { it.isNotBlank() }?.let { source ->
@@ -144,13 +158,13 @@ abstract class GroundsPushTask : DefaultTask() {
             }
             bundleFile
         } else {
-            val manifestJar = manifest.jar
+            val manifestJar = runtime.jar
                 .takeIf { it != DEFAULT_MANIFEST_JAR }
                 ?.let { projectDirectory.file(it).get().asFile }
             val jar = jarFile.orNull?.asFile
                 ?: manifestJar
                 ?: autoDetectedJarFile.orNull?.asFile
-                ?: projectDirectory.file(manifest.jar).get().asFile
+                ?: projectDirectory.file(runtime.jar).get().asFile
             if (!jar.isFile) {
                 throw GradleException(
                     "grounds-push: JAR not found at ${jar.absolutePath}. " +
@@ -188,7 +202,7 @@ abstract class GroundsPushTask : DefaultTask() {
             "[grounds-push] Artifact selected " +
                 "(name=${artifact.name}, size=${humanSize(artifact.length())}, " +
                 "shape=${if (bundleEntryCount > 0) "bundle($bundleEntryCount)" else "single-jar"}, " +
-                "target=$resolvedTarget, apiUrl=$resolvedApiUrl)"
+                "target=$resolvedTarget, flavor=${selected.flavorKey ?: "single"}, apiUrl=$resolvedApiUrl)"
         )
 
         val client = GroundsForgeClient(
@@ -198,13 +212,13 @@ abstract class GroundsPushTask : DefaultTask() {
             callTimeout = Duration.ofMinutes(timeoutMinutes.get().toLong()),
         )
 
-        validateBaseImageCatalog(client, manifest.type, manifest.baseImage)
+        validateBaseImageCatalog(client, catalogManifestType(runtime.type), runtime.baseImage)
 
         val manifestJson = Json.encodeToString(JsonObject.serializer(), buildJsonObject {
             put("name", JsonPrimitive(manifest.name))
-            put("type", JsonPrimitive(manifest.type))
-            put("baseImage", JsonPrimitive(manifest.baseImage))
-            manifest.resources?.let { r ->
+            put("type", JsonPrimitive(runtime.type))
+            put("baseImage", JsonPrimitive(runtime.baseImage))
+            runtime.resources?.let { r ->
                 put("resources", buildJsonObject {
                     r.cpu?.let { put("cpu", JsonPrimitive(it)) }
                     r.memory?.let { put("memory", JsonPrimitive(it)) }
@@ -226,6 +240,7 @@ abstract class GroundsPushTask : DefaultTask() {
                 resolvedTarget,
                 artifact,
                 force = force.get(),
+                flavor = selected.flavorKey,
                 effectivePluginSourcesJson = effectivePluginSourcesJson,
             )
         } catch (e: GroundsForgeClient.ApiException) {
@@ -426,6 +441,63 @@ abstract class GroundsPushTask : DefaultTask() {
         val body = errorBody ?: return false
         return listOfNotNull(body.error, body.reason, body.message)
             .any { it.contains("whitelist", ignoreCase = true) }
+    }
+
+    private data class SelectedRuntime(
+        val flavorKey: String?,
+        val runtime: ManifestRuntime,
+    )
+
+    private data class ManifestRuntime(
+        val type: String,
+        val baseImage: String,
+        val jar: String,
+        val plugins: List<GroundsYaml.PluginEntry>?,
+        val resources: GroundsYaml.Resources?,
+    )
+
+    private fun selectManifestRuntime(manifest: GroundsYaml, requestedFlavor: String?): SelectedRuntime {
+        val flavors = manifest.flavors
+        if (flavors == null) {
+            return SelectedRuntime(
+                flavorKey = null,
+                runtime = ManifestRuntime(
+                    type = manifest.type ?: throw GroundsYamlParseException("grounds.yaml: missing required field 'type'"),
+                    baseImage = manifest.baseImage
+                        ?: throw GroundsYamlParseException("grounds.yaml: missing required field 'baseImage'"),
+                    jar = manifest.jar,
+                    plugins = manifest.plugins,
+                    resources = manifest.resources,
+                ),
+            )
+        }
+
+        val key = requestedFlavor?.trim()?.takeIf { it.isNotEmpty() }
+            ?: throw GroundsYamlParseException(
+                "grounds.yaml: flavor selection required (available=${flavors.keys.joinToString(",")})",
+            )
+        val flavor = flavors[key]
+            ?: throw GroundsYamlParseException(
+                "grounds.yaml: unknown flavor '$key' (available=${flavors.keys.joinToString(",")})",
+            )
+        return SelectedRuntime(
+            flavorKey = key,
+            runtime = ManifestRuntime(
+                type = flavor.type,
+                baseImage = flavor.baseImage,
+                jar = flavor.jar,
+                plugins = flavor.plugins,
+                resources = flavor.resources,
+            ),
+        )
+    }
+
+    private fun catalogManifestType(type: String): String = when (type) {
+        "paper", "plugin-paper" -> "plugin-paper"
+        "velocity", "plugin-velocity" -> "plugin-velocity"
+        "gamemode" -> "gamemode"
+        "minestom", "service" -> "service"
+        else -> type
     }
 
     private fun resolveSource(ref: SourceRef): File = when (ref) {
