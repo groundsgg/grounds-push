@@ -28,6 +28,7 @@ class GroundsPushPlugin : Plugin<Project> {
             t.manifestFile.set(ext.manifestFile)
             t.jarFile.set(ext.jarFile)
             t.target.set(ext.target.orElse("dev"))
+            t.flavor.set(ext.flavor)
             t.timeoutMinutes.set(ext.timeoutMinutes)
             t.connectTimeoutSeconds.set(ext.connectTimeoutSeconds)
             t.failOnWhitelistError.set(ext.failOnWhitelistError)
@@ -98,7 +99,11 @@ class GroundsPushPlugin : Plugin<Project> {
             // wire dependsOn + plumb the Jar task's archiveFile into the
             // task. We do this here (config-time) so users don't have to
             // hand-write `tasks.named("groundsPush") { dependsOn(":foo:jar") }`.
-            wireGradleProjectPluginRefs(p, pushTask)
+            wireGradleProjectPluginRefs(
+                p,
+                pushTask,
+                flavorFromCommandLine(p) ?: normalizeFlavor(ext.flavor.orNull),
+            )
         }
     }
 
@@ -110,9 +115,10 @@ class GroundsPushPlugin : Plugin<Project> {
     private fun wireGradleProjectPluginRefs(
         p: Project,
         pushTask: org.gradle.api.tasks.TaskProvider<GroundsPushTask>,
+        selectedFlavor: String?,
     ) {
         val entries = (
-            gradleProjectRefsFromManifest(p) +
+            gradleProjectRefsFromManifest(p, selectedFlavor) +
                 gradleProjectRefsFromResolvedPluginsFile(p)
             ).toSet()
 
@@ -142,12 +148,15 @@ class GroundsPushPlugin : Plugin<Project> {
         }
     }
 
-    private fun gradleProjectRefsFromManifest(p: Project): List<String> {
+    private fun gradleProjectRefsFromManifest(p: Project, selectedFlavor: String?): List<String> {
         val manifestFile = p.layout.projectDirectory.file("grounds.yaml").asFile
         if (!manifestFile.isFile) return emptyList()
 
         val pluginEntries = try {
-            GroundsYamlParser.parse(manifestFile).plugins ?: return emptyList()
+            val manifest = GroundsYamlParser.parse(manifestFile)
+            manifest.plugins ?: selectedFlavor
+                ?.let { manifest.flavors?.get(it)?.plugins }
+                ?: return emptyList()
         } catch (_: GroundsYamlParseException) {
             // Don't fail apply() on a malformed manifest — the task action
             // re-parses and surfaces the error there with proper context.
@@ -155,6 +164,19 @@ class GroundsPushPlugin : Plugin<Project> {
         }
 
         return pluginEntries.map { it.source }.filter { it.startsWith(":") }
+    }
+
+    private fun flavorFromCommandLine(p: Project): String? {
+        val args = p.gradle.startParameter.taskRequests.flatMap { it.args }
+        args.forEachIndexed { index, arg ->
+            when {
+                arg.startsWith("--flavor=") ->
+                    return normalizeFlavor(arg.substringAfter("="))
+                arg == "--flavor" && index + 1 < args.size ->
+                    return normalizeFlavor(args[index + 1])
+            }
+        }
+        return null
     }
 
     private fun gradleProjectRefsFromResolvedPluginsFile(p: Project): List<String> {
@@ -192,4 +214,7 @@ class GroundsPushPlugin : Plugin<Project> {
         val file = File(path)
         return if (file.isAbsolute) file else p.layout.projectDirectory.file(path).asFile
     }
+
+    private fun normalizeFlavor(value: String?): String? =
+        value?.trim()?.takeIf { it.isNotEmpty() }
 }

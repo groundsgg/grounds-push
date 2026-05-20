@@ -14,6 +14,8 @@ abstract class GroundsPushExtension @Inject constructor(objects: ObjectFactory) 
     abstract val jarFile: RegularFileProperty
     /** target override — "dev" or "staging". */
     abstract val target: Property<String>
+    /** App flavor to push when grounds.yaml declares `flavors:`. */
+    abstract val flavor: Property<String>
     abstract val timeoutMinutes: Property<Int>
     abstract val connectTimeoutSeconds: Property<Int>
     abstract val failOnWhitelistError: Property<Boolean>
