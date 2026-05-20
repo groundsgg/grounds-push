@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0](https://github.com/groundsgg/grounds-push/compare/v0.9.1...v0.10.0) (2026-05-20)
+
+
+### Features
+
+* **push:** support app flavor selection ([#32](https://github.com/groundsgg/grounds-push/issues/32)) ([6af92ad](https://github.com/groundsgg/grounds-push/commit/6af92adafe48812146a9915c8fd40dc72020f639))
+
+
+### Bug Fixes
+
+* raise push artifact cap to 150mb ([#30](https://github.com/groundsgg/grounds-push/issues/30)) ([0d51644](https://github.com/groundsgg/grounds-push/commit/0d51644d3b335e281797e80ca3cb728bb3e95146))
+
 ## [0.9.1](https://github.com/groundsgg/grounds-push/compare/v0.9.0...v0.9.1) (2026-05-14)
 
 
