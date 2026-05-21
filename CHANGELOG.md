@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/groundsgg/grounds-push/compare/v0.10.0...v0.10.1) (2026-05-21)
+
+
+### Bug Fixes
+
+* **push:** upload full flavor manifest ([#34](https://github.com/groundsgg/grounds-push/issues/34)) ([91629e7](https://github.com/groundsgg/grounds-push/commit/91629e79769894c1861dfe96087d794dd00f24eb))
+
 ## [0.10.0](https://github.com/groundsgg/grounds-push/compare/v0.9.1...v0.10.0) (2026-05-20)
 
 
