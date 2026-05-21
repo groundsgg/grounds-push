@@ -18,6 +18,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -214,22 +215,7 @@ abstract class GroundsPushTask : DefaultTask() {
 
         validateBaseImageCatalog(client, catalogManifestType(runtime.type), runtime.baseImage)
 
-        val manifestJson = Json.encodeToString(JsonObject.serializer(), buildJsonObject {
-            put("name", JsonPrimitive(manifest.name))
-            put("type", JsonPrimitive(runtime.type))
-            put("baseImage", JsonPrimitive(runtime.baseImage))
-            runtime.resources?.let { r ->
-                put("resources", buildJsonObject {
-                    r.cpu?.let { put("cpu", JsonPrimitive(it)) }
-                    r.memory?.let { put("memory", JsonPrimitive(it)) }
-                })
-            }
-            if (pluginSources.isNotEmpty()) {
-                // Forge re-validates owner=groundsgg + tag pin-shape on
-                // every github source as defense-in-depth.
-                put("pluginSources", buildJsonArray { pluginSources.forEach { add(it.toJson()) } })
-            }
-        })
+        val manifestJson = buildUploadManifestJson(manifest, selected, pluginSources)
         val effectivePluginSourcesJson = resolvedPlugins?.let {
             ResolvedPluginSources.json.encodeToString(it.effectivePluginSources)
         }
@@ -498,6 +484,63 @@ abstract class GroundsPushTask : DefaultTask() {
         "gamemode" -> "gamemode"
         "minestom", "service" -> "service"
         else -> type
+    }
+
+    private fun buildUploadManifestJson(
+        manifest: GroundsYaml,
+        selected: SelectedRuntime,
+        pluginSources: List<SourceRef>,
+    ): String = Json.encodeToString(JsonObject.serializer(), buildJsonObject {
+        put("name", JsonPrimitive(manifest.name))
+        val flavors = manifest.flavors
+        if (flavors != null) {
+            put("flavors", buildJsonObject {
+                flavors.forEach { (key, flavor) ->
+                    put(
+                        key,
+                        flavor.toJson(
+                            pluginSources = if (key == selected.flavorKey) pluginSources else emptyList(),
+                        ),
+                    )
+                }
+            })
+        } else {
+            putRuntimeFields(
+                type = selected.runtime.type,
+                baseImage = selected.runtime.baseImage,
+                resources = selected.runtime.resources,
+                pluginSources = pluginSources,
+            )
+        }
+    })
+
+    private fun GroundsYaml.Flavor.toJson(pluginSources: List<SourceRef>): JsonObject =
+        buildJsonObject {
+            putRuntimeFields(type, baseImage, resources, pluginSources)
+            if (plugins == null) {
+                put("jar", JsonPrimitive(jar))
+            }
+        }
+
+    private fun JsonObjectBuilder.putRuntimeFields(
+        type: String,
+        baseImage: String,
+        resources: GroundsYaml.Resources?,
+        pluginSources: List<SourceRef>,
+    ) {
+        put("type", JsonPrimitive(type))
+        put("baseImage", JsonPrimitive(baseImage))
+        resources?.let { r ->
+            put("resources", buildJsonObject {
+                r.cpu?.let { put("cpu", JsonPrimitive(it)) }
+                r.memory?.let { put("memory", JsonPrimitive(it)) }
+            })
+        }
+        if (pluginSources.isNotEmpty()) {
+            // Forge re-validates owner=groundsgg + tag pin-shape on
+            // every github source as defense-in-depth.
+            put("pluginSources", buildJsonArray { pluginSources.forEach { add(it.toJson()) } })
+        }
     }
 
     private fun resolveSource(ref: SourceRef): File = when (ref) {
