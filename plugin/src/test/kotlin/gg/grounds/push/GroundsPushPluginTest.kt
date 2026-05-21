@@ -317,7 +317,7 @@ class GroundsPushPluginTest {
     }
 
     @Test
-    fun `groundsPush selects app flavor manifest and artifact`(@TempDir tmp: File) {
+    fun `groundsPush uploads full app flavor manifest and selected artifact`(@TempDir tmp: File) {
         val server = MockWebServer()
         server.start()
         try {
@@ -371,8 +371,11 @@ class GroundsPushPluginTest {
             val body = request.body.readByteArray()
             val manifest = multipartPart(body, boundary, "manifest").toString(Charsets.UTF_8)
             assertTrue(manifest.contains(""""name":"plugin-config""""), manifest)
-            assertTrue(manifest.contains(""""type":"velocity""""), manifest)
-            assertTrue(manifest.contains(""""baseImage":"velocity""""), manifest)
+            assertTrue(manifest.contains(""""flavors""""), manifest)
+            assertTrue(manifest.contains(""""paper""""), manifest)
+            assertTrue(manifest.contains(""""velocity""""), manifest)
+            assertTrue(manifest.contains(""""jar":"${paperJar.name}""""), manifest)
+            assertTrue(manifest.contains(""""jar":"${velocityJar.name}""""), manifest)
             assertEquals("velocity", multipartPart(body, boundary, "flavor").toString(Charsets.UTF_8))
             assertTrue(multipartPart(body, boundary, "jar").toString(Charsets.ISO_8859_1).contains("VELOCITY"))
         } finally {
