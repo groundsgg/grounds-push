@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   publish:
-    runs-on: self-hosted
+    runs-on: groundsgg-runners
     env:
       GRADLE_USER_HOME: /tmp/grounds-push-gradle-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
