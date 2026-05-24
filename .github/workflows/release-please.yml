@@ -13,7 +13,7 @@ permissions:
 jobs:
   release-please:
     name: Create Release
-    runs-on: self-hosted
+    runs-on: groundsgg-runners
     steps:
       - name: Check out
         uses: actions/checkout@v6
