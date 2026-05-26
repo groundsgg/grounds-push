@@ -7,10 +7,14 @@ import okhttp3.mockwebserver.MockWebServer
 import org.gradle.testkit.runner.GradleRunner
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -370,12 +374,18 @@ class GroundsPushPluginTest {
             val boundary = request.getHeader("Content-Type")!!.substringAfter("boundary=")
             val body = request.body.readByteArray()
             val manifest = multipartPart(body, boundary, "manifest").toString(Charsets.UTF_8)
-            assertTrue(manifest.contains(""""name":"plugin-config""""), manifest)
-            assertTrue(manifest.contains(""""flavors""""), manifest)
-            assertTrue(manifest.contains(""""paper""""), manifest)
-            assertTrue(manifest.contains(""""velocity""""), manifest)
-            assertTrue(manifest.contains(""""jar":"${paperJar.name}""""), manifest)
-            assertTrue(manifest.contains(""""jar":"${velocityJar.name}""""), manifest)
+            val manifestJson = Json.parseToJsonElement(manifest).jsonObject
+            assertEquals("plugin-config", manifestJson["name"]?.jsonPrimitive?.content)
+            assertFalse("type" in manifestJson, manifest)
+            assertFalse("baseImage" in manifestJson, manifest)
+            val flavors = manifestJson["flavors"]!!.jsonObject
+            assertEquals(setOf("paper", "velocity"), flavors.keys)
+            assertEquals("paper", flavors["paper"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+            assertEquals("paper", flavors["paper"]!!.jsonObject["baseImage"]!!.jsonPrimitive.content)
+            assertEquals(paperJar.name, flavors["paper"]!!.jsonObject["jar"]!!.jsonPrimitive.content)
+            assertEquals("velocity", flavors["velocity"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+            assertEquals("velocity", flavors["velocity"]!!.jsonObject["baseImage"]!!.jsonPrimitive.content)
+            assertEquals(velocityJar.name, flavors["velocity"]!!.jsonObject["jar"]!!.jsonPrimitive.content)
             assertEquals("velocity", multipartPart(body, boundary, "flavor").toString(Charsets.UTF_8))
             assertTrue(multipartPart(body, boundary, "jar").toString(Charsets.ISO_8859_1).contains("VELOCITY"))
         } finally {
