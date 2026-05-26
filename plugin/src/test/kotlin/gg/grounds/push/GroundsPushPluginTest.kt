@@ -392,17 +392,19 @@ class GroundsPushPluginTest {
             val body = request.body.readByteArray()
             val manifest = multipartPart(body, boundary, "manifest").toString(Charsets.UTF_8)
             val manifestJson = Json.parseToJsonElement(manifest).jsonObject
-            assertEquals("plugin-config", manifestJson["name"]?.jsonPrimitive?.content)
+            assertEquals("plugin-config", manifestJson["name"]?.jsonPrimitive?.content, manifest)
             assertFalse("type" in manifestJson, manifest)
             assertFalse("baseImage" in manifestJson, manifest)
-            val flavors = manifestJson["flavors"]!!.jsonObject
-            assertEquals(setOf("paper", "velocity"), flavors.keys)
-            assertEquals("paper", flavors["paper"]!!.jsonObject["type"]!!.jsonPrimitive.content)
-            assertEquals("paper", flavors["paper"]!!.jsonObject["baseImage"]!!.jsonPrimitive.content)
-            assertEquals(paperJar.name, flavors["paper"]!!.jsonObject["jar"]!!.jsonPrimitive.content)
-            assertEquals("velocity", flavors["velocity"]!!.jsonObject["type"]!!.jsonPrimitive.content)
-            assertEquals("velocity", flavors["velocity"]!!.jsonObject["baseImage"]!!.jsonPrimitive.content)
-            assertEquals(velocityJar.name, flavors["velocity"]!!.jsonObject["jar"]!!.jsonPrimitive.content)
+            val flavors = assertNotNull(manifestJson["flavors"], manifest).jsonObject
+            assertEquals(setOf("paper", "velocity"), flavors.keys, manifest)
+            val paper = assertNotNull(flavors["paper"], manifest).jsonObject
+            assertEquals("paper", assertNotNull(paper["type"], manifest).jsonPrimitive.content, manifest)
+            assertEquals("paper", assertNotNull(paper["baseImage"], manifest).jsonPrimitive.content, manifest)
+            assertEquals(paperJar.name, assertNotNull(paper["jar"], manifest).jsonPrimitive.content, manifest)
+            val velocity = assertNotNull(flavors["velocity"], manifest).jsonObject
+            assertEquals("velocity", assertNotNull(velocity["type"], manifest).jsonPrimitive.content, manifest)
+            assertEquals("velocity", assertNotNull(velocity["baseImage"], manifest).jsonPrimitive.content, manifest)
+            assertEquals(velocityJar.name, assertNotNull(velocity["jar"], manifest).jsonPrimitive.content, manifest)
             assertEquals("velocity", multipartPart(body, boundary, "flavor").toString(Charsets.UTF_8))
             assertTrue(multipartPart(body, boundary, "jar").toString(Charsets.ISO_8859_1).contains("VELOCITY"))
         } finally {
