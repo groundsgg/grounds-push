@@ -41,6 +41,19 @@ private fun credentialsFileFor(homeRoot: File): File {
     }
 }
 
+private fun GradleRunner.withIsolatedCredentialsEnvironment(homeRoot: File): GradleRunner {
+    val os = System.getProperty("os.name").lowercase()
+    val env = System.getenv().toMutableMap()
+    env.remove("GROUNDS_TOKEN")
+    env.remove("GROUNDS_API_URL")
+    if (os.contains("win")) {
+        env["APPDATA"] = File(homeRoot, "AppData/Roaming").absolutePath
+    } else {
+        env["XDG_CONFIG_HOME"] = File(homeRoot, ".config").absolutePath
+    }
+    return withEnvironment(env)
+}
+
 private fun multipartPart(body: ByteArray, boundary: String, name: String): ByteArray {
     val text = body.toString(Charsets.ISO_8859_1)
     val headerStart = text.indexOf("""Content-Disposition: form-data; name="$name"""")
@@ -197,6 +210,7 @@ class GroundsPushPluginTest {
             GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPushRetry", "--pushId=p1")
                 .build()
 
@@ -242,6 +256,7 @@ class GroundsPushPluginTest {
             val result = GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPush")
                 .build()
 
@@ -299,6 +314,7 @@ class GroundsPushPluginTest {
             val result = GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPush")
                 .build()
 
@@ -364,6 +380,7 @@ class GroundsPushPluginTest {
             GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPush", "--flavor=velocity")
                 .build()
 
@@ -450,6 +467,7 @@ class GroundsPushPluginTest {
             GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments("-Duser.home=${tmp.absolutePath}", ":app:groundsPush", "--flavor=velocity")
                 .build()
 
@@ -502,6 +520,7 @@ class GroundsPushPluginTest {
             val result = GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPush")
                 .build()
 
@@ -582,6 +601,7 @@ class GroundsPushPluginTest {
             GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments(
                     "-Duser.home=${tmp.absolutePath}",
                     "groundsPush",
@@ -666,6 +686,7 @@ class GroundsPushPluginTest {
             GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments(
                     "-Duser.home=${tmp.absolutePath}",
                     "groundsPush",
