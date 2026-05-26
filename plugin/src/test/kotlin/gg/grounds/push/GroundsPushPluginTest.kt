@@ -7,10 +7,14 @@ import okhttp3.mockwebserver.MockWebServer
 import org.gradle.testkit.runner.GradleRunner
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -35,6 +39,19 @@ private fun credentialsFileFor(homeRoot: File): File {
         else ->
             File(homeRoot, ".config/grounds/credentials.json")
     }
+}
+
+private fun GradleRunner.withIsolatedCredentialsEnvironment(homeRoot: File): GradleRunner {
+    val os = System.getProperty("os.name").lowercase()
+    val env = System.getenv().toMutableMap()
+    env.remove("GROUNDS_TOKEN")
+    env.remove("GROUNDS_API_URL")
+    if (os.contains("win")) {
+        env["APPDATA"] = File(homeRoot, "AppData/Roaming").absolutePath
+    } else {
+        env["XDG_CONFIG_HOME"] = File(homeRoot, ".config").absolutePath
+    }
+    return withEnvironment(env)
 }
 
 private fun multipartPart(body: ByteArray, boundary: String, name: String): ByteArray {
@@ -193,6 +210,7 @@ class GroundsPushPluginTest {
             GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPushRetry", "--pushId=p1")
                 .build()
 
@@ -238,6 +256,7 @@ class GroundsPushPluginTest {
             val result = GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPush")
                 .build()
 
@@ -295,6 +314,7 @@ class GroundsPushPluginTest {
             val result = GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPush")
                 .build()
 
@@ -360,6 +380,7 @@ class GroundsPushPluginTest {
             GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPush", "--flavor=velocity")
                 .build()
 
@@ -370,12 +391,20 @@ class GroundsPushPluginTest {
             val boundary = request.getHeader("Content-Type")!!.substringAfter("boundary=")
             val body = request.body.readByteArray()
             val manifest = multipartPart(body, boundary, "manifest").toString(Charsets.UTF_8)
-            assertTrue(manifest.contains(""""name":"plugin-config""""), manifest)
-            assertTrue(manifest.contains(""""flavors""""), manifest)
-            assertTrue(manifest.contains(""""paper""""), manifest)
-            assertTrue(manifest.contains(""""velocity""""), manifest)
-            assertTrue(manifest.contains(""""jar":"${paperJar.name}""""), manifest)
-            assertTrue(manifest.contains(""""jar":"${velocityJar.name}""""), manifest)
+            val manifestJson = Json.parseToJsonElement(manifest).jsonObject
+            assertEquals("plugin-config", manifestJson["name"]?.jsonPrimitive?.content, manifest)
+            assertFalse("type" in manifestJson, manifest)
+            assertFalse("baseImage" in manifestJson, manifest)
+            val flavors = assertNotNull(manifestJson["flavors"], manifest).jsonObject
+            assertEquals(setOf("paper", "velocity"), flavors.keys, manifest)
+            val paper = assertNotNull(flavors["paper"], manifest).jsonObject
+            assertEquals("paper", assertNotNull(paper["type"], manifest).jsonPrimitive.content, manifest)
+            assertEquals("paper", assertNotNull(paper["baseImage"], manifest).jsonPrimitive.content, manifest)
+            assertEquals(paperJar.name, assertNotNull(paper["jar"], manifest).jsonPrimitive.content, manifest)
+            val velocity = assertNotNull(flavors["velocity"], manifest).jsonObject
+            assertEquals("velocity", assertNotNull(velocity["type"], manifest).jsonPrimitive.content, manifest)
+            assertEquals("velocity", assertNotNull(velocity["baseImage"], manifest).jsonPrimitive.content, manifest)
+            assertEquals(velocityJar.name, assertNotNull(velocity["jar"], manifest).jsonPrimitive.content, manifest)
             assertEquals("velocity", multipartPart(body, boundary, "flavor").toString(Charsets.UTF_8))
             assertTrue(multipartPart(body, boundary, "jar").toString(Charsets.ISO_8859_1).contains("VELOCITY"))
         } finally {
@@ -440,6 +469,7 @@ class GroundsPushPluginTest {
             GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments("-Duser.home=${tmp.absolutePath}", ":app:groundsPush", "--flavor=velocity")
                 .build()
 
@@ -492,6 +522,7 @@ class GroundsPushPluginTest {
             val result = GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPush")
                 .build()
 
@@ -572,6 +603,7 @@ class GroundsPushPluginTest {
             GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments(
                     "-Duser.home=${tmp.absolutePath}",
                     "groundsPush",
@@ -656,6 +688,7 @@ class GroundsPushPluginTest {
             GradleRunner.create()
                 .withProjectDir(tmp)
                 .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
                 .withArguments(
                     "-Duser.home=${tmp.absolutePath}",
                     "groundsPush",
