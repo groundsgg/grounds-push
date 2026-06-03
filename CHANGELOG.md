@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/groundsgg/grounds-push/compare/v0.10.1...v0.11.0) (2026-06-03)
+
+
+### Features
+
+* transport an app's events: block to forge ([#37](https://github.com/groundsgg/grounds-push/issues/37)) ([5e359aa](https://github.com/groundsgg/grounds-push/commit/5e359aa3b1cc041bab69ede798c9dc7604dab260))
+
 ## [0.10.1](https://github.com/groundsgg/grounds-push/compare/v0.10.0...v0.10.1) (2026-05-21)
 
 
