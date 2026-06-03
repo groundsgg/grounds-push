@@ -492,6 +492,18 @@ abstract class GroundsPushTask : DefaultTask() {
         pluginSources: List<SourceRef>,
     ): String = Json.encodeToString(JsonObject.serializer(), buildJsonObject {
         put("name", JsonPrimitive(manifest.name))
+        // Forge maps these to the gg.grounds/events SA annotation + NATS_URL.
+        manifest.events?.takeIf { it.isNotEmpty() }?.let { events ->
+            put("events", buildJsonArray {
+                events.forEach { e ->
+                    add(buildJsonObject {
+                        put("subject", JsonPrimitive(e.subject))
+                        e.dir?.let { put("dir", JsonPrimitive(it)) }
+                        e.schema?.let { put("schema", JsonPrimitive(it)) }
+                    })
+                }
+            })
+        }
         val flavors = manifest.flavors
         if (flavors != null) {
             put("flavors", buildJsonObject {
