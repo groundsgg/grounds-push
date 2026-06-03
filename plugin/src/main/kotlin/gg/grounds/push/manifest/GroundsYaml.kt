@@ -21,8 +21,21 @@ data class GroundsYaml(
     val target: String? = null,    // optional — plugin extension's target wins when set
     val resources: Resources? = null,
     val flavors: Map<String, Flavor>? = null,
+    /**
+     * NATS pub/sub subjects this app uses. Forge stamps these as the
+     * `gg.grounds/events` ServiceAccount annotation and injects `NATS_URL`,
+     * so the auth-callout broker scopes the app to exactly these subjects.
+     * Top-level only (declared on the manifest, not per-flavor).
+     */
+    val events: List<EventDecl>? = null,
 ) {
     data class Resources(val cpu: String? = null, val memory: String? = null)
+
+    data class EventDecl(
+        val subject: String,
+        val dir: String? = null,    // "pub" | "sub" | "both" — forge defaults to "both"
+        val schema: String? = null, // optional proto FQN; documentation today
+    )
 
     data class Flavor(
         val type: String,
@@ -85,10 +98,12 @@ object GroundsYamlParser {
         val jar = rawJar ?: "build/libs/*.jar"
         val target = raw.optString("target")
         val resources = raw.optResources("resources")
+        val events = raw.optEvents("events")
         return GroundsYaml(
             name = name, type = type, baseImage = baseImage,
             jar = jar, plugins = plugins,
             target = target, resources = resources, flavors = flavors,
+            events = events,
         )
     }
 
@@ -127,6 +142,23 @@ object GroundsYamlParser {
             cpu = v.optString("cpu"),
             memory = v.optString("memory"),
         )
+    }
+
+    private fun Map<*, *>.optEvents(key: String): List<GroundsYaml.EventDecl>? {
+        val v = this[key] ?: return null
+        if (v !is List<*>) throw GroundsYamlParseException(
+            "grounds.yaml: field '$key' must be a sequence of {subject, dir} mappings, got ${v.javaClass.simpleName}",
+        )
+        return v.map { item ->
+            if (item !is Map<*, *>) throw GroundsYamlParseException(
+                "grounds.yaml: '$key' entries must be mappings with a 'subject', got ${item?.javaClass?.simpleName ?: "null"}",
+            )
+            GroundsYaml.EventDecl(
+                subject = item.requireString("subject"),
+                dir = item.optString("dir"),
+                schema = item.optString("schema"),
+            )
+        }
     }
 
     private fun Map<*, *>.optFlavors(key: String): Map<String, GroundsYaml.Flavor>? {
