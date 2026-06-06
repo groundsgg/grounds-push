@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: arc-linux
     env:
       GRADLE_USER_HOME: /tmp/grounds-push-gradle-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
