@@ -308,4 +308,55 @@ class GroundsYamlTest {
         val msg = e.message!!
         assert(msg.contains("resources")) { msg }
     }
+
+    @Test
+    fun `parses services map`() {
+        val m = parse("""
+            name: my-plugin
+            type: plugin-paper
+            baseImage: paper
+            services:
+              leaderboard:
+                use: groundsgg.leaderboard.v1.LeaderboardService
+                version: v1
+              player:
+                use: groundsgg.player.v1.PlayerService
+                provider: project:abc123/custom-player
+        """.trimIndent())
+
+        val services = m.services ?: error("expected services")
+        assertEquals("groundsgg.leaderboard.v1.LeaderboardService", services["leaderboard"]?.use)
+        assertEquals("v1", services["leaderboard"]?.version)
+        assertNull(services["leaderboard"]?.provider)
+        assertEquals("groundsgg.player.v1.PlayerService", services["player"]?.use)
+        assertEquals("project:abc123/custom-player", services["player"]?.provider)
+    }
+
+    @Test
+    fun `rejects services as a non-mapping`() {
+        val e = assertThrows<GroundsYamlParseException> {
+            parse("""
+                name: foo
+                type: plugin-paper
+                baseImage: paper
+                services:
+                  - leaderboard
+            """.trimIndent())
+        }
+        assert(e.message!!.contains("services")) { e.message!! }
+    }
+
+    @Test
+    fun `rejects service decl as a non-mapping`() {
+        val e = assertThrows<GroundsYamlParseException> {
+            parse("""
+                name: foo
+                type: plugin-paper
+                baseImage: paper
+                services:
+                  leaderboard: groundsgg.leaderboard.v1.LeaderboardService
+            """.trimIndent())
+        }
+        assert(e.message!!.contains("services.leaderboard")) { e.message!! }
+    }
 }

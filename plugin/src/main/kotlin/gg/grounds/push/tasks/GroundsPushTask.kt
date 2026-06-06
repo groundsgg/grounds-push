@@ -504,6 +504,18 @@ abstract class GroundsPushTask : DefaultTask() {
                 }
             })
         }
+        // Forge maps each key to a ${KEY_UPPER}_SERVICE_URL env var on the pod.
+        manifest.services?.takeIf { it.isNotEmpty() }?.let { services ->
+            put("services", buildJsonObject {
+                services.forEach { (key, decl) ->
+                    put(key, buildJsonObject {
+                        decl.use?.let { put("use", JsonPrimitive(it)) }
+                        decl.provider?.let { put("provider", JsonPrimitive(it)) }
+                        decl.version?.let { put("version", JsonPrimitive(it)) }
+                    })
+                }
+            })
+        }
         val flavors = manifest.flavors
         if (flavors != null) {
             put("flavors", buildJsonObject {

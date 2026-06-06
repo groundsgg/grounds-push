@@ -28,6 +28,14 @@ data class GroundsYaml(
      * Top-level only (declared on the manifest, not per-flavor).
      */
     val events: List<EventDecl>? = null,
+    /**
+     * Typed Domain-Services this app calls via the Grounds SDK. Each key
+     * becomes a `${KEY_UPPER}_SERVICE_URL` env var on the pod, populated by
+     * forge from the per-env service catalogue. Plugin code reads these via
+     * `GroundsServices.channel("<key>")`. Top-level only (v2.2 Service
+     * Architecture).
+     */
+    val services: Map<String, ServiceDecl>? = null,
 ) {
     data class Resources(val cpu: String? = null, val memory: String? = null)
 
@@ -35,6 +43,12 @@ data class GroundsYaml(
         val subject: String,
         val dir: String? = null,    // "pub" | "sub" | "both" — forge defaults to "both"
         val schema: String? = null, // optional proto FQN; documentation today
+    )
+
+    data class ServiceDecl(
+        val use: String? = null,      // proto FQN, e.g. groundsgg.leaderboard.v1.LeaderboardService
+        val provider: String? = null, // custom-deployed variant override: project:<id>/<plugin>
+        val version: String? = null,  // optional proto-version pin (e.g. v1)
     )
 
     data class Flavor(
@@ -99,11 +113,12 @@ object GroundsYamlParser {
         val target = raw.optString("target")
         val resources = raw.optResources("resources")
         val events = raw.optEvents("events")
+        val services = raw.optServices("services")
         return GroundsYaml(
             name = name, type = type, baseImage = baseImage,
             jar = jar, plugins = plugins,
             target = target, resources = resources, flavors = flavors,
-            events = events,
+            events = events, services = services,
         )
     }
 
@@ -157,6 +172,26 @@ object GroundsYamlParser {
                 subject = item.requireString("subject"),
                 dir = item.optString("dir"),
                 schema = item.optString("schema"),
+            )
+        }
+    }
+
+    private fun Map<*, *>.optServices(key: String): Map<String, GroundsYaml.ServiceDecl>? {
+        val v = this[key] ?: return null
+        if (v !is Map<*, *>) throw GroundsYamlParseException(
+            "grounds.yaml: field '$key' must be a mapping of service keys to {use, provider, version}, got ${v.javaClass.simpleName}",
+        )
+        return v.entries.associate { (rawKey, rawDecl) ->
+            if (rawKey !is String) throw GroundsYamlParseException(
+                "grounds.yaml: '$key' keys must be strings, got ${rawKey?.javaClass?.simpleName ?: "null"}",
+            )
+            if (rawDecl !is Map<*, *>) throw GroundsYamlParseException(
+                "grounds.yaml: '$key.$rawKey' must be a mapping of {use, provider, version}, got ${rawDecl?.javaClass?.simpleName ?: "null"}",
+            )
+            rawKey to GroundsYaml.ServiceDecl(
+                use = rawDecl.optString("use"),
+                provider = rawDecl.optString("provider"),
+                version = rawDecl.optString("version"),
             )
         }
     }
