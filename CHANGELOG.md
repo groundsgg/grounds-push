@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/groundsgg/grounds-push/compare/v0.11.0...v0.12.0) (2026-06-06)
+
+
+### Features
+
+* **manifest:** forward services declarations to forge ([#39](https://github.com/groundsgg/grounds-push/issues/39)) ([34cf74f](https://github.com/groundsgg/grounds-push/commit/34cf74f74e0d6193834da1d64024aca4e6cc78ff))
+
 ## [0.11.0](https://github.com/groundsgg/grounds-push/compare/v0.10.1...v0.11.0) (2026-06-03)
 
 
