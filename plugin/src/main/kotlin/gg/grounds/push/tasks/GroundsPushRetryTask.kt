@@ -15,6 +15,7 @@ import java.time.Duration
 @DisableCachingByDefault(because = "Retries a remote grounds-forge push and has no reproducible local outputs.")
 abstract class GroundsPushRetryTask : DefaultTask() {
     @get:Input @get:Optional abstract val apiUrl: Property<String>
+    @get:Input @get:Optional abstract val projectId: Property<String>
     @get:Input abstract val timeoutMinutes: Property<Int>
     @get:Input abstract val connectTimeoutSeconds: Property<Int>
 
@@ -33,9 +34,12 @@ abstract class GroundsPushRetryTask : DefaultTask() {
             ?: System.getenv("GROUNDS_API_URL")
             ?: (creds as? Credentials.FromFile)?.apiUrl
             ?: "https://platform.grnds.io").trimEnd('/')
+        val resolvedProjectId = projectId.orNull
+            ?: System.getenv("GROUNDS_PROJECT")
         val client = GroundsForgeClient(
             apiUrl = resolvedApi,
             token = creds.accessToken,
+            projectId = resolvedProjectId,
             connectTimeout = Duration.ofSeconds(connectTimeoutSeconds.get().toLong()),
             callTimeout = Duration.ofMinutes(timeoutMinutes.get().toLong()),
         )

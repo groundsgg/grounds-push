@@ -10,6 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
@@ -28,6 +29,7 @@ interface PushSseListener {
 class GroundsForgeClient(
     apiUrl: String,
     private val token: String,
+    private val projectId: String? = null,
     connectTimeout: Duration = Duration.ofSeconds(20),
     callTimeout: Duration = Duration.ofMinutes(5),
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
@@ -83,7 +85,7 @@ class GroundsForgeClient(
             )
         }
         val body = bodyBuilder.build()
-        val url = if (force) "$apiUrl/v1/pushes?force=true" else "$apiUrl/v1/pushes"
+        val url = endpoint("/v1/pushes", mapOf("force" to "true").takeIf { force }.orEmpty())
         val req = Request.Builder()
             .url(url)
             .header("Authorization", "Bearer $token")
@@ -100,7 +102,7 @@ class GroundsForgeClient(
 
     fun getPush(pushId: String): PushDetail {
         val req = Request.Builder()
-            .url("$apiUrl/v1/pushes/$pushId")
+            .url(endpoint("/v1/pushes/$pushId"))
             .header("Authorization", "Bearer $token")
             .get()
             .build()
@@ -113,7 +115,7 @@ class GroundsForgeClient(
 
     fun retryPush(pushId: String): CreatePushResponse {
         val req = Request.Builder()
-            .url("$apiUrl/v1/pushes/$pushId/retry")
+            .url(endpoint("/v1/pushes/$pushId/retry"))
             .header("Authorization", "Bearer $token")
             .post(ByteArray(0).toRequestBody(null))
             .build()
@@ -143,7 +145,7 @@ class GroundsForgeClient(
      */
     fun streamLogs(pushId: String, listener: PushSseListener): EventSource {
         val req = Request.Builder()
-            .url("$apiUrl/v1/pushes/$pushId/logs")
+            .url(endpoint("/v1/pushes/$pushId/logs"))
             .header("Authorization", "Bearer $token")
             .header("Accept", "text/event-stream")
             .get()
@@ -209,6 +211,13 @@ class GroundsForgeClient(
 
     private fun parseObj(raw: String): JsonObject =
         json.parseToJsonElement(raw) as JsonObject
+
+    private fun endpoint(path: String, query: Map<String, String> = emptyMap()): String {
+        val builder = "$apiUrl$path".toHttpUrl().newBuilder()
+        query.forEach { (key, value) -> builder.addQueryParameter(key, value) }
+        projectId?.trim()?.takeIf { it.isNotEmpty() }?.let { builder.addQueryParameter("projectId", it) }
+        return builder.build().toString()
+    }
 
     private fun toApiException(code: Int, raw: String): ApiException {
         val body = try {

@@ -41,6 +41,7 @@ import java.util.concurrent.atomic.AtomicReference
 @DisableCachingByDefault(because = "Pushes a plugin artifact to grounds-forge and streams remote build logs.")
 abstract class GroundsPushTask : DefaultTask() {
     @get:Input @get:Optional abstract val apiUrl: Property<String>
+    @get:Input @get:Optional abstract val projectId: Property<String>
     @get:InputFile @get:PathSensitive(PathSensitivity.RELATIVE) abstract val manifestFile: RegularFileProperty
     @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.RELATIVE) abstract val jarFile: RegularFileProperty
     @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.RELATIVE) abstract val autoDetectedJarFile: RegularFileProperty
@@ -191,6 +192,8 @@ abstract class GroundsPushTask : DefaultTask() {
             ?: System.getenv("GROUNDS_API_URL")
             ?: (creds as? Credentials.FromFile)?.apiUrl
             ?: "https://platform.grnds.io"    // internal default
+        val resolvedProjectId = projectId.orNull
+            ?: System.getenv("GROUNDS_PROJECT")
 
         val resolvedTarget = overrideTarget.orNull ?: target.orNull ?: manifest.target ?: "dev"
         if (resolvedTarget != "dev" && resolvedTarget != "staging") {
@@ -209,6 +212,7 @@ abstract class GroundsPushTask : DefaultTask() {
         val client = GroundsForgeClient(
             apiUrl = resolvedApiUrl,
             token = creds.accessToken,
+            projectId = resolvedProjectId,
             connectTimeout = Duration.ofSeconds(connectTimeoutSeconds.get().toLong()),
             callTimeout = Duration.ofMinutes(timeoutMinutes.get().toLong()),
         )

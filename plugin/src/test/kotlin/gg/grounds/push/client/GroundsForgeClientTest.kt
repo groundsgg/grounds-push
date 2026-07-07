@@ -53,6 +53,48 @@ class GroundsForgeClientTest {
     }
 
     @Test
+    fun `project scope is appended to push endpoints`(@TempDir tmp: File) {
+        val scopedClient = GroundsForgeClient(
+            server.url("/").toString().removeSuffix("/"),
+            "test-token",
+            projectId = "project-1",
+        )
+        server.enqueue(MockResponse().setResponseCode(202).setBody(
+            """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""
+        ))
+        server.enqueue(MockResponse().setBody(
+            """{"id":"p1","status":"building","target":"dev","baseImage":"paper","imageTag":null,"failureReason":null,"createdAt":"2026-04-24T10:00:00Z","updatedAt":"2026-04-24T10:00:01Z"}"""
+        ))
+        server.enqueue(MockResponse().setResponseCode(202).setBody(
+            """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""
+        ))
+
+        scopedClient.createPush("{}", "dev", fakeJar(tmp))
+        scopedClient.getPush("p1")
+        scopedClient.retryPush("p1")
+
+        assertEquals("/v1/pushes?projectId=project-1", server.takeRequest().path)
+        assertEquals("/v1/pushes/p1?projectId=project-1", server.takeRequest().path)
+        assertEquals("/v1/pushes/p1/retry?projectId=project-1", server.takeRequest().path)
+    }
+
+    @Test
+    fun `project scope is appended after force query`(@TempDir tmp: File) {
+        val scopedClient = GroundsForgeClient(
+            server.url("/").toString().removeSuffix("/"),
+            "test-token",
+            projectId = "project-1",
+        )
+        server.enqueue(MockResponse().setResponseCode(202).setBody(
+            """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""
+        ))
+
+        scopedClient.createPush("{}", "dev", fakeJar(tmp), force = true)
+
+        assertEquals("/v1/pushes?force=true&projectId=project-1", server.takeRequest().path)
+    }
+
+    @Test
     fun `createPush sends application gzip when uploading tar gz bundle`(@TempDir tmp: File) {
         server.enqueue(MockResponse().setResponseCode(202).setBody(
             """{"pushId":"p1","status":"received","reused":false,"logsUrl":"/v1/pushes/p1/logs"}"""
@@ -212,6 +254,32 @@ class GroundsForgeClientTest {
         assertTrue(closedLatch.await(5, TimeUnit.SECONDS), "stream not closed")
         assertEquals(listOf("building", "build_succeeded"), statuses)
         assertEquals(listOf("INFO: Executing Kaniko build"), logs)
+    }
+
+    @Test
+    fun `streamLogs appends project scope`() {
+        val scopedClient = GroundsForgeClient(
+            server.url("/").toString().removeSuffix("/"),
+            "test-token",
+            projectId = "project-1",
+        )
+        server.enqueue(MockResponse()
+            .setHeader("Content-Type", "text/event-stream")
+            .setBody("event: done\ndata: {}\n\n")
+        )
+
+        val doneLatch = CountDownLatch(1)
+        scopedClient.streamLogs("p1", object : PushSseListener {
+            override fun onStatus(status: String, imageTag: String?, failureReason: String?) {}
+            override fun onLog(ts: String, line: String) {}
+            override fun onWarning(reason: String) {}
+            override fun onDone() { doneLatch.countDown() }
+            override fun onError(reason: String) {}
+            override fun onStreamClosed(normal: Boolean) {}
+        })
+
+        assertTrue(doneLatch.await(5, TimeUnit.SECONDS), "done event not received")
+        assertEquals("/v1/pushes/p1/logs?projectId=project-1", server.takeRequest().path)
     }
 
     @Test
