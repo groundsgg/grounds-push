@@ -8,6 +8,8 @@ import javax.inject.Inject
 abstract class GroundsPushExtension @Inject constructor(objects: ObjectFactory) {
     /** grounds-forge API URL. Precedence: this value, GROUNDS_API_URL, credentials file apiUrl, https://platform.grnds.io. */
     abstract val apiUrl: Property<String>
+    /** Grounds project id. Precedence: this value, GROUNDS_PROJECT, forge account default. */
+    abstract val projectId: Property<String>
     /** Path to grounds.yaml. Defaults to `<projectDir>/grounds.yaml`. */
     abstract val manifestFile: RegularFileProperty
     /** JAR to push. Auto-detected from shadowJar/jar if not set. */

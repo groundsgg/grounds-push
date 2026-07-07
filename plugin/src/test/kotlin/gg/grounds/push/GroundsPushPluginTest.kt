@@ -54,6 +54,23 @@ private fun GradleRunner.withIsolatedCredentialsEnvironment(homeRoot: File): Gra
     return withEnvironment(env)
 }
 
+private fun GradleRunner.withIsolatedCredentialsEnvironment(
+    homeRoot: File,
+    extra: Map<String, String>,
+): GradleRunner {
+    val os = System.getProperty("os.name").lowercase()
+    val env = System.getenv().toMutableMap()
+    env.remove("GROUNDS_TOKEN")
+    env.remove("GROUNDS_API_URL")
+    if (os.contains("win")) {
+        env["APPDATA"] = File(homeRoot, "AppData/Roaming").absolutePath
+    } else {
+        env["XDG_CONFIG_HOME"] = File(homeRoot, ".config").absolutePath
+    }
+    env.putAll(extra)
+    return withEnvironment(env)
+}
+
 private fun multipartPart(body: ByteArray, boundary: String, name: String): ByteArray {
     val text = body.toString(Charsets.ISO_8859_1)
     val headerStart = text.indexOf("""Content-Disposition: form-data; name="$name"""")
@@ -331,6 +348,50 @@ class GroundsPushPluginTest {
             assertTrue(!result.output.contains("Resolving credentials"), result.output)
             assertTrue(!result.output.contains("→"), result.output)
             assertTrue(!result.output.contains("✔"), result.output)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `groundsPush scopes push request with project id from environment`(@TempDir tmp: File) {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(catalogResponse())
+            server.enqueue(MockResponse().setResponseCode(200).setBody(
+                """{"pushId":"p1","status":"build_succeeded","reused":true,"logsUrl":null}"""
+            ))
+            File(tmp, "settings.gradle.kts").writeText("rootProject.name = \"test\"\n")
+            File(tmp, "app.jar").writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04) + ByteArray(100))
+            File(tmp, "grounds.yaml").writeText("""
+                name: test-plugin
+                type: plugin-paper
+                baseImage: paper
+            """.trimIndent())
+            File(tmp, "build.gradle.kts").writeText("""
+                plugins {
+                    id("gg.grounds.push")
+                }
+
+                groundsPush {
+                    apiUrl.set("${server.url("/").toString().removeSuffix("/")}")
+                    jarFile.set(layout.projectDirectory.file("app.jar"))
+                }
+            """.trimIndent())
+            val credentials = credentialsFileFor(tmp)
+            credentials.parentFile.mkdirs()
+            credentials.writeText("""{"version":1,"accessToken":"token"}""")
+
+            GradleRunner.create()
+                .withProjectDir(tmp)
+                .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp, mapOf("GROUNDS_PROJECT" to "project-1"))
+                .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPush")
+                .build()
+
+            assertEquals("/v1/base-images", server.takeRequest(5, TimeUnit.SECONDS)?.path)
+            assertEquals("/v1/pushes?projectId=project-1", server.takeRequest(5, TimeUnit.SECONDS)?.path)
         } finally {
             server.shutdown()
         }

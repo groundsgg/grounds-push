@@ -25,6 +25,7 @@ class GroundsPushPlugin : Plugin<Project> {
             t.group = "grounds"
             t.description = "Upload JAR + manifest to grounds-forge and stream build logs"
             t.apiUrl.set(ext.apiUrl)
+            t.projectId.set(ext.projectId)
             t.manifestFile.set(ext.manifestFile)
             t.jarFile.set(ext.jarFile)
             t.target.set(ext.target.orElse("dev"))
@@ -55,6 +56,7 @@ class GroundsPushPlugin : Plugin<Project> {
             t.group = "grounds"
             t.description = "Retry a failed push by pushId (reuses the server-stored JAR)"
             t.apiUrl.set(ext.apiUrl)
+            t.projectId.set(ext.projectId)
             t.timeoutMinutes.set(ext.timeoutMinutes)
             t.connectTimeoutSeconds.set(ext.connectTimeoutSeconds)
         }
