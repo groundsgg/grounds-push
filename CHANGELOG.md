@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/groundsgg/grounds-push/compare/v0.12.0...v0.12.1) (2026-07-07)
+
+
+### Bug Fixes
+
+* scope push requests to project ([#42](https://github.com/groundsgg/grounds-push/issues/42)) ([76870ff](https://github.com/groundsgg/grounds-push/commit/76870ffe9f06ba2cc082ec88ae952d23fd9a9b70))
+
 ## [0.12.0](https://github.com/groundsgg/grounds-push/compare/v0.11.0...v0.12.0) (2026-06-06)
 
 
