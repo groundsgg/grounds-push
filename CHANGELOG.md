@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/groundsgg/grounds-push/compare/v0.12.2...v0.13.0) (2026-07-13)
+
+
+### Features
+
+* forward the agones and matchmaking blocks to forge ([#47](https://github.com/groundsgg/grounds-push/issues/47)) ([c65ef92](https://github.com/groundsgg/grounds-push/commit/c65ef920624d109c5e09d17f382ade40b108a247))
+
 ## [0.12.2](https://github.com/groundsgg/grounds-push/compare/v0.12.1...v0.12.2) (2026-07-13)
 
 
