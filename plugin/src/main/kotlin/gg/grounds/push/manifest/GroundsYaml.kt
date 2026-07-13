@@ -36,6 +36,17 @@ data class GroundsYaml(
      * Architecture).
      */
     val services: Map<String, ServiceDecl>? = null,
+    /**
+     * Agones knobs. Only meaningful for the types forge renders as a Fleet.
+     */
+    val agones: Agones? = null,
+    /**
+     * Hands the GameServer's lifecycle to the matchmaker. Its mere presence makes forge render
+     * `GROUNDS_MATCHMAKING` onto the pod and declare the Agones `matches` counter with this
+     * capacity — and without the counter DECLARED, the matchmaker's allocation selector matches
+     * nothing and no match can ever be placed on the fleet.
+     */
+    val matchmaking: Matchmaking? = null,
 ) {
     data class Resources(val cpu: String? = null, val memory: String? = null)
 
@@ -67,6 +78,10 @@ data class GroundsYaml(
         data class Structured(override val source: String) : PluginEntry
     }
 }
+
+data class Agones(val replicas: Int? = null)
+
+data class Matchmaking(val matchesPerServer: Int)
 
 class GroundsYamlParseException(
     message: String,
@@ -114,11 +129,14 @@ object GroundsYamlParser {
         val resources = raw.optResources("resources")
         val events = raw.optEvents("events")
         val services = raw.optServices("services")
+        val agones = raw.optAgones("agones")
+        val matchmaking = raw.optMatchmaking("matchmaking")
         return GroundsYaml(
             name = name, type = type, baseImage = baseImage,
             jar = jar, plugins = plugins,
             target = target, resources = resources, flavors = flavors,
             events = events, services = services,
+            agones = agones, matchmaking = matchmaking,
         )
     }
 
@@ -143,6 +161,38 @@ object GroundsYamlParser {
             "grounds.yaml: field '$key' must be a string, got ${v.javaClass.simpleName}",
         )
         return v.ifEmpty { null }
+    }
+
+    private fun Map<*, *>.optAgones(key: String): Agones? {
+        val v = this[key] ?: return null
+        if (v !is Map<*, *>) throw GroundsYamlParseException(
+            "grounds.yaml: '$key' must be a mapping, got ${v.javaClass.simpleName}",
+        )
+        val replicas = v["replicas"]
+        return Agones(
+            replicas = when (replicas) {
+                null -> null
+                is Int -> replicas
+                else -> throw GroundsYamlParseException(
+                    "grounds.yaml: 'agones.replicas' must be an integer",
+                )
+            },
+        )
+    }
+
+    private fun Map<*, *>.optMatchmaking(key: String): Matchmaking? {
+        val v = this[key] ?: return null
+        if (v !is Map<*, *>) throw GroundsYamlParseException(
+            "grounds.yaml: '$key' must be a mapping, got ${v.javaClass.simpleName}",
+        )
+        val perServer = v["matchesPerServer"]
+            ?: throw GroundsYamlParseException(
+                "grounds.yaml: 'matchmaking.matchesPerServer' is required",
+            )
+        if (perServer !is Int) throw GroundsYamlParseException(
+            "grounds.yaml: 'matchmaking.matchesPerServer' must be an integer",
+        )
+        return Matchmaking(matchesPerServer = perServer)
     }
 
     private fun Map<*, *>.optResources(

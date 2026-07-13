@@ -535,6 +535,20 @@ abstract class GroundsPushTask : DefaultTask() {
         pluginSources: List<SourceRef>,
     ): String = Json.encodeToString(JsonObject.serializer(), buildJsonObject {
         put("name", JsonPrimitive(manifest.name))
+        // Fleet knobs. Hand-built JSON means a block that is not named here simply
+        // does not exist as far as forge is concerned — `matchmaking:` was dropped
+        // in silence, so the fleet came up with no `matches` counter and no
+        // GROUNDS_MATCHMAKING, and the matchmaker could never place a match on it.
+        manifest.agones?.let { agones ->
+            put("agones", buildJsonObject {
+                agones.replicas?.let { put("replicas", JsonPrimitive(it)) }
+            })
+        }
+        manifest.matchmaking?.let { mm ->
+            put("matchmaking", buildJsonObject {
+                put("matchesPerServer", JsonPrimitive(mm.matchesPerServer))
+            })
+        }
         // Forge maps these to the gg.grounds/events SA annotation + NATS_URL.
         manifest.events?.takeIf { it.isNotEmpty() }?.let { events ->
             put("events", buildJsonArray {
