@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.2](https://github.com/groundsgg/grounds-push/compare/v0.12.1...v0.12.2) (2026-07-13)
+
+
+### Bug Fixes
+
+* **client:** don't kill a large upload at ten seconds ([#45](https://github.com/groundsgg/grounds-push/issues/45)) ([1ea2155](https://github.com/groundsgg/grounds-push/commit/1ea2155ac494e8867f343ce93cc14081d5e69758))
+
 ## [0.12.1](https://github.com/groundsgg/grounds-push/compare/v0.12.0...v0.12.1) (2026-07-07)
 
 
