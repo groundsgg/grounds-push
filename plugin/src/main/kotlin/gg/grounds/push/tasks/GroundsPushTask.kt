@@ -1,5 +1,6 @@
 package gg.grounds.push.tasks
 
+import gg.grounds.push.bundle.DistributionBundler
 import gg.grounds.push.bundle.PluginBundler
 import gg.grounds.push.client.*
 import gg.grounds.push.manifest.BaseImageCatalogValidationException
@@ -46,6 +47,11 @@ abstract class GroundsPushTask : DefaultTask() {
     @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.RELATIVE) abstract val jarFile: RegularFileProperty
     @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.RELATIVE) abstract val autoDetectedJarFile: RegularFileProperty
     @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.NONE) abstract val resolvedPluginsFile: RegularFileProperty
+    /** Output dir of the `application` plugin's `installDist` task (`bin/`
+     *  + `lib/`), wired by the plugin's afterEvaluate whenever that task
+     *  exists. Only consumed when the manifest runtime type is a Minestom
+     *  distribution type — ignored otherwise. */
+    @get:InputDirectory @get:Optional @get:PathSensitive(PathSensitivity.RELATIVE) abstract val installDistDir: DirectoryProperty
     @get:Input @get:Optional abstract val target: Property<String>
     @get:Input @get:Optional abstract val flavor: Property<String>
     @get:Input abstract val timeoutMinutes: Property<Int>
@@ -114,12 +120,17 @@ abstract class GroundsPushTask : DefaultTask() {
         }
         val runtime = selected.runtime
 
-        // Two upload shapes:
-        //   1. plugins: [...] in the manifest → tar.gz bundle, mixed
+        // Three upload shapes:
+        //   1. distribution: manifest type says "this is a server, not a
+        //      plugin" (minestom-gamemode/minestom-server/minestom, or a
+        //      baseImage starting with "minestom") → tar.gz of the
+        //      `application` plugin's installDist output (bin/ + lib/).
+        //   2. plugins: [...] in the manifest → tar.gz bundle, mixed
         //      sources (local paths, :gradle-project refs, github
         //      releases). Forge detects gzip magic and unpacks.
-        //   2. single jar (autoDetected, ext.jarFile, or manifest.jar)
+        //   3. single jar (autoDetected, ext.jarFile, or manifest.jar)
         //      → existing path.
+        val isDistribution = isDistributionPush(runtime.type, runtime.baseImage)
         val manifestPluginSources = runtime.plugins?.map { it.source }
         val pluginSources: List<SourceRef> = if (resolvedPlugins != null) {
             resolvedPlugins.plugins.mapNotNull { entry ->
@@ -141,7 +152,23 @@ abstract class GroundsPushTask : DefaultTask() {
             } ?: emptyList()
         }
         val bundleEntryCount = resolvedPlugins?.plugins?.size ?: pluginSources.size
-        val artifact: File = if (resolvedPlugins != null) {
+        val artifact: File = if (isDistribution) {
+            val installDir = installDistDir.orNull?.asFile
+            if (installDir == null || !installDir.isDirectory) {
+                throw GradleException(
+                    "grounds-push: a Minestom server push needs the `application` plugin — " +
+                        "`installDist` not found. Apply `id(\"application\")` in build.gradle(.kts) " +
+                        "so `installDist` produces build/install/<name>/{bin,lib}."
+                )
+            }
+            val bundleFile = bundleOutputFile.get().asFile
+            try {
+                DistributionBundler.bundle(installDir, bundleFile)
+            } catch (e: IllegalArgumentException) {
+                throw GradleException("grounds-push: ${e.message}", e)
+            }
+            bundleFile
+        } else if (resolvedPlugins != null) {
             val resolved = resolvedPlugins.plugins.map { entry -> resolveResolvedPluginSource(entry) }
             val bundleFile = bundleOutputFile.get().asFile
             try {
@@ -205,7 +232,13 @@ abstract class GroundsPushTask : DefaultTask() {
         logger.lifecycle(
             "[grounds-push] Artifact selected " +
                 "(name=${artifact.name}, size=${humanSize(artifact.length())}, " +
-                "shape=${if (bundleEntryCount > 0) "bundle($bundleEntryCount)" else "single-jar"}, " +
+                "shape=${
+                    when {
+                        isDistribution -> "distribution"
+                        bundleEntryCount > 0 -> "bundle($bundleEntryCount)"
+                        else -> "single-jar"
+                    }
+                }, " +
                 "target=$resolvedTarget, flavor=${selected.flavorKey ?: "single"}, apiUrl=$resolvedApiUrl)"
         )
 
@@ -482,6 +515,12 @@ abstract class GroundsPushTask : DefaultTask() {
         )
     }
 
+    // The manifest `type` already says "this is a server, not a plugin" —
+    // baseImage is a fallback signal for when type doesn't (yet) spell that
+    // out explicitly.
+    private fun isDistributionPush(type: String, baseImage: String): Boolean =
+        type in DISTRIBUTION_MANIFEST_TYPES || baseImage.startsWith("minestom")
+
     private fun catalogManifestType(type: String): String = when (type) {
         "paper", "plugin-paper" -> "plugin-paper"
         "velocity", "plugin-velocity" -> "plugin-velocity"
@@ -626,5 +665,6 @@ abstract class GroundsPushTask : DefaultTask() {
 
     private companion object {
         const val DEFAULT_MANIFEST_JAR = "build/libs/*.jar"
+        val DISTRIBUTION_MANIFEST_TYPES = setOf("minestom-gamemode", "minestom-server", "minestom")
     }
 }

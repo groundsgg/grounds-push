@@ -769,8 +769,96 @@ class GroundsPushPluginTest {
         }
     }
 
+    @Test
+    fun `groundsPush uploads installDist output as a tar-gz for a minestom-gamemode manifest`(@TempDir tmp: File) {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(minestomCatalogResponse())
+            server.enqueue(MockResponse().setResponseCode(200).setBody(
+                """{"pushId":"p1","status":"build_succeeded","reused":true,"logsUrl":null}"""
+            ))
+            File(tmp, "settings.gradle.kts").writeText("rootProject.name = \"test\"\n")
+            File(tmp, "grounds.yaml").writeText("""
+                name: test-minestom
+                type: minestom-gamemode
+                baseImage: minestom
+            """.trimIndent())
+            File(tmp, "build.gradle.kts").writeText("""
+                plugins {
+                    id("application")
+                    id("gg.grounds.push")
+                }
+
+                application {
+                    mainClass.set("dev.example.Main")
+                }
+
+                groundsPush {
+                    apiUrl.set("${server.url("/").toString().removeSuffix("/")}")
+                }
+            """.trimIndent())
+            val credentials = credentialsFileFor(tmp)
+            credentials.parentFile.mkdirs()
+            credentials.writeText("""{"version":1,"accessToken":"token"}""")
+
+            GradleRunner.create()
+                .withProjectDir(tmp)
+                .withPluginClasspath()
+                .withIsolatedCredentialsEnvironment(tmp)
+                .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPush")
+                .build()
+
+            assertEquals("/v1/base-images", server.takeRequest(5, TimeUnit.SECONDS)?.path)
+            val request = server.takeRequest(5, TimeUnit.SECONDS)
+            assertNotNull(request, "expected push request")
+            assertEquals("/v1/pushes", request.path)
+            val boundary = request.getHeader("Content-Type")!!.substringAfter("boundary=")
+            val body = request.body.readByteArray()
+            val bodyText = body.toString(Charsets.ISO_8859_1)
+            assertTrue(bodyText.contains("filename=\"bundle.tar.gz\""), bodyText)
+
+            val jarPart = multipartPart(body, boundary, "jar")
+            // gzip magic — not a JAR (PK zip magic).
+            assertEquals(0x1f.toByte(), jarPart[0])
+            assertEquals(0x8b.toByte(), jarPart[1])
+            assertTrue("app/bin/app" in tarGzEntryNames(jarPart))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `groundsPush fails with an actionable message when a minestom-gamemode project has no application plugin`(@TempDir tmp: File) {
+        File(tmp, "settings.gradle.kts").writeText("rootProject.name = \"test\"\n")
+        File(tmp, "grounds.yaml").writeText("""
+            name: test-minestom
+            type: minestom-gamemode
+            baseImage: minestom
+        """.trimIndent())
+        File(tmp, "build.gradle.kts").writeText("""
+            plugins {
+                id("gg.grounds.push")
+            }
+        """.trimIndent())
+
+        val result = GradleRunner.create()
+            .withProjectDir(tmp)
+            .withPluginClasspath()
+            .withArguments("groundsPush")
+            .buildAndFail()
+
+        assertTrue(result.output.contains("a Minestom server push needs the `application` plugin"), result.output)
+        assertTrue(result.output.contains("installDist"), result.output)
+    }
+
     private fun catalogResponse(): MockResponse =
         MockResponse().setResponseCode(200).setBody(
             """{"items":[{"key":"paper","displayName":"Paper","manifestType":"plugin-paper","image":"ghcr.io/groundsgg/paper","versions":[{"version":"0.8.2","selectable":true}]},{"key":"velocity","displayName":"Velocity","manifestType":"plugin-velocity","image":"ghcr.io/groundsgg/velocity","versions":[{"version":"0.8.2","selectable":true}]}]}"""
+        )
+
+    private fun minestomCatalogResponse(): MockResponse =
+        MockResponse().setResponseCode(200).setBody(
+            """{"items":[{"key":"minestom","displayName":"Minestom","manifestType":"minestom-gamemode","image":"ghcr.io/groundsgg/minestom","versions":[{"version":"0.8.2","selectable":true}]}]}"""
         )
 }
