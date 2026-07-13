@@ -35,6 +35,18 @@ class GroundsForgeClient(
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(connectTimeout)
         .callTimeout(callTimeout)
+        // OkHttp's read/write timeouts default to 10 SECONDS, and they are per
+        // socket operation, not per call — so setting only callTimeout leaves an
+        // upload dying at 10s of slow throughput while callTimeout sits there
+        // unreached. A plugin JAR is a few MB and never noticed. A Minestom
+        // distribution is tens of MB (the server, its libs, its worlds) and dies
+        // every time, with a bare "SocketTimeoutException: timeout" that says
+        // nothing about which timeout fired.
+        //
+        // The call as a whole is still bounded by callTimeout; these just stop a
+        // slow-but-progressing transfer from being killed mid-flight.
+        .readTimeout(callTimeout)
+        .writeTimeout(callTimeout)
         .retryOnConnectionFailure(false)
         .build(),
 ) {
