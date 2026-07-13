@@ -11,6 +11,7 @@ import kotlinx.serialization.SerializationException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.UnknownProjectException
+import org.gradle.api.tasks.Sync
 import org.gradle.jvm.tasks.Jar
 import java.io.File
 
@@ -106,6 +107,21 @@ class GroundsPushPlugin : Plugin<Project> {
                 pushTask,
                 flavorFromCommandLine(p) ?: normalizeFlavor(ext.flavor.orNull),
             )
+
+            // Minestom server push: the manifest `type` (checked at task-action
+            // time, not here) decides whether the whole `application`
+            // distribution ships instead of a single JAR. Wire `installDist`
+            // unconditionally, same as the JAR auto-detection above — it's a
+            // no-op for projects that never apply `application`, and the task
+            // action surfaces a clear error if a distribution push is
+            // requested but no `installDist` task was found here.
+            val installDistTask = p.tasks.findByName("installDist") as? Sync
+            if (installDistTask != null) {
+                pushTask.configure { t ->
+                    t.installDistDir.set(p.layout.dir(p.providers.provider { installDistTask.destinationDir }))
+                    t.dependsOn(installDistTask)
+                }
+            }
         }
     }
 
