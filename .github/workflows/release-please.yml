@@ -13,7 +13,7 @@ permissions:
 jobs:
   release-please:
     name: Create Release
-    runs-on: arc-linux
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     steps:
       - name: Check out
         uses: actions/checkout@v6
