@@ -10,9 +10,14 @@ permissions:
   contents: read
   packages: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    timeout-minutes: 30
     env:
       GRADLE_USER_HOME: /tmp/grounds-push-gradle-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
