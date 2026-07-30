@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     env:
       GRADLE_USER_HOME: /tmp/grounds-push-gradle-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
