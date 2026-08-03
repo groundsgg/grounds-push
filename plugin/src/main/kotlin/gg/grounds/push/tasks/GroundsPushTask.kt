@@ -321,6 +321,7 @@ abstract class GroundsPushTask : DefaultTask() {
         logger.lifecycle("[grounds-push] Build log stream opened (pushId=$pushId, target=$target)")
         val done = CountDownLatch(1)
         val terminal = AtomicReference<TerminalState?>()
+        val builtImageTag = AtomicReference<String?>()
         val last20 = ArrayDeque<String>(20)
 
         val listener = object : PushSseListener {
@@ -331,8 +332,12 @@ abstract class GroundsPushTask : DefaultTask() {
                         "${failureReason?.let { ", reason=$it" } ?: ""})"
                 )
                 when (status) {
-                    "build_succeeded" -> terminal.compareAndSet(null, TerminalState.Succeeded(imageTag))
-                    "build_failed" -> terminal.compareAndSet(null, TerminalState.Failed(failureReason ?: "unknown"))
+                    "build_succeeded" -> builtImageTag.set(imageTag)
+                    "ready" -> terminal.compareAndSet(null, TerminalState.Succeeded(builtImageTag.get()))
+                    "build_failed", "deploy_failed" -> terminal.compareAndSet(
+                        null,
+                        TerminalState.Failed(failureReason ?: "unknown"),
+                    )
                 }
             }
             override fun onLog(ts: String, line: String) {
@@ -371,8 +376,8 @@ abstract class GroundsPushTask : DefaultTask() {
         try {
             val detail = client.getPush(pushId)
             return when (detail.status) {
-                "build_succeeded" -> TerminalState.Succeeded(detail.imageTag)
-                "build_failed" -> TerminalState.Failed(detail.failureReason ?: "unknown")
+                "ready", "build_succeeded" -> TerminalState.Succeeded(detail.imageTag)
+                "build_failed", "deploy_failed" -> TerminalState.Failed(detail.failureReason ?: "unknown")
                 else -> throw GradleException(
                     "grounds-push: stream closed with non-terminal status " +
                         "(pushId=$pushId, status=${detail.status})"
@@ -390,11 +395,11 @@ abstract class GroundsPushTask : DefaultTask() {
     private fun handleTerminalState(pushId: String, terminalState: TerminalState, last20: ArrayDeque<String>) {
         when (terminalState) {
             is TerminalState.Succeeded -> {
-                logger.lifecycle("[grounds-push] Build succeeded (pushId=$pushId, imageTag=${terminalState.imageTag ?: "unknown"})")
+                logger.lifecycle("[grounds-push] Deployment ready (pushId=$pushId, imageTag=${terminalState.imageTag ?: "unknown"})")
             }
             is TerminalState.Failed -> {
                 val tailMsg = if (last20.isNotEmpty()) "\n  last 20 lines:\n" + last20.joinToString("\n") { "    $it" } else ""
-                throw GradleException("grounds-push: build_failed (pushId=$pushId, reason=${terminalState.reason})$tailMsg")
+                throw GradleException("grounds-push: push_failed (pushId=$pushId, reason=${terminalState.reason})$tailMsg")
             }
         }
     }

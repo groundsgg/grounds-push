@@ -281,6 +281,7 @@ class GroundsPushPluginTest {
             ))
             val sseBody = "event: status\ndata: {\"status\":\"building\"}\n\n" +
                 "event: status\ndata: {\"status\":\"build_succeeded\",\"imageTag\":\"zot/test:abc\"}\n\n" +
+                "event: status\ndata: {\"status\":\"ready\"}\n\n" +
                 "event: done\ndata: {}\n\n"
             server.enqueue(MockResponse()
                 .setHeader("Content-Type", "text/event-stream")
@@ -326,7 +327,7 @@ class GroundsPushPluginTest {
             assertTrue(result.output.contains("Push accepted (pushId=p1, target=staging, statusCode=202, reused=false)"), result.output)
             assertTrue(result.output.contains("Build link available (pushId=p1, url=https://platform.grnds.io/builds/p1)"), result.output)
             assertTrue(result.output.contains("Build status received (pushId=p1, status=building"), result.output)
-            assertTrue(result.output.contains("Build succeeded (pushId=p1, imageTag=zot/test:abc)"), result.output)
+            assertTrue(result.output.contains("Deployment ready (pushId=p1, imageTag=zot/test:abc)"), result.output)
             assertTrue(!result.output.contains("Plugin initialized (version=consumer-app)"), result.output)
             assertTrue(!result.output.contains("Resolving credentials"), result.output)
             assertTrue(!result.output.contains("→"), result.output)
@@ -526,7 +527,7 @@ class GroundsPushPluginTest {
                 .withArguments("-Duser.home=${tmp.absolutePath}", "groundsPush")
                 .build()
 
-            assertTrue(result.output.contains("Build succeeded (pushId=p1, imageTag=zot/test:abc)"), result.output)
+            assertTrue(result.output.contains("Deployment ready (pushId=p1, imageTag=zot/test:abc)"), result.output)
             assertEquals("/v1/base-images", server.takeRequest(5, TimeUnit.SECONDS)?.path)
             assertEquals("/v1/pushes", server.takeRequest(5, TimeUnit.SECONDS)?.path)
             assertEquals("/v1/pushes/p1/logs", server.takeRequest(5, TimeUnit.SECONDS)?.path)
