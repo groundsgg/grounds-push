@@ -356,8 +356,10 @@ abstract class GroundsPushTask : DefaultTask() {
 
     private fun streamAndWait(client: GroundsForgeClient, pushId: String, target: String) {
         logger.lifecycle("[grounds-push] Build log stream opened (pushId=$pushId, target=$target)")
+        val deadlineNanos = System.nanoTime() + TimeUnit.MINUTES.toNanos(timeoutMinutes.get().toLong())
         val done = CountDownLatch(1)
         val terminal = AtomicReference<TerminalState?>()
+        val builtImageTag = AtomicReference<String?>()
         val last20 = ArrayDeque<String>(20)
 
         val listener = object : PushSseListener {
@@ -368,8 +370,12 @@ abstract class GroundsPushTask : DefaultTask() {
                         "${failureReason?.let { ", reason=$it" } ?: ""})"
                 )
                 when (status) {
-                    "build_succeeded" -> terminal.compareAndSet(null, TerminalState.Succeeded(imageTag))
-                    "build_failed" -> terminal.compareAndSet(null, TerminalState.Failed(failureReason ?: "unknown"))
+                    "build_succeeded" -> builtImageTag.set(imageTag)
+                    "ready" -> terminal.compareAndSet(null, TerminalState.Succeeded(builtImageTag.get()))
+                    "build_failed", "deploy_failed" -> terminal.compareAndSet(
+                        null,
+                        TerminalState.Failed(failureReason ?: "unknown"),
+                    )
                 }
             }
             override fun onLog(ts: String, line: String) {
@@ -394,44 +400,58 @@ abstract class GroundsPushTask : DefaultTask() {
         }
         val es = client.streamLogs(pushId, listener)
 
-        val waited = done.await(timeoutMinutes.get().toLong(), TimeUnit.MINUTES)
+        val waited = done.await((deadlineNanos - System.nanoTime()).coerceAtLeast(0), TimeUnit.NANOSECONDS)
         es.cancel()
         if (!waited) {
             throw GradleException("grounds-push: push $pushId exceeded ${timeoutMinutes.get()}-minute timeout")
         }
 
-        val terminalState = terminal.get() ?: pollTerminalState(client, pushId)
+        val terminalState = terminal.get() ?: pollTerminalState(client, pushId, deadlineNanos)
         handleTerminalState(pushId, terminalState, last20)
     }
 
-    private fun pollTerminalState(client: GroundsForgeClient, pushId: String): TerminalState {
-        try {
-            val detail = client.getPush(pushId)
-            return when (detail.status) {
-                "build_succeeded" -> TerminalState.Succeeded(detail.imageTag)
-                "build_failed" -> TerminalState.Failed(detail.failureReason ?: "unknown")
-                else -> throw GradleException(
-                    "grounds-push: stream closed with non-terminal status " +
-                        "(pushId=$pushId, status=${detail.status})"
+    private fun pollTerminalState(client: GroundsForgeClient, pushId: String, deadlineNanos: Long): TerminalState {
+        var builtImageTag: String? = null
+        while (System.nanoTime() < deadlineNanos) {
+            try {
+                val detail = client.getPush(pushId)
+                when (detail.status) {
+                    "ready" -> return TerminalState.Succeeded(detail.imageTag ?: builtImageTag)
+                    "build_failed", "deploy_failed" -> return TerminalState.Failed(detail.failureReason ?: "unknown")
+                    "build_succeeded" -> builtImageTag = detail.imageTag ?: builtImageTag
+                    "received", "building", "deploying" -> Unit
+                    else -> throw GradleException(
+                        "grounds-push: stream closed with unknown status " +
+                            "(pushId=$pushId, status=${detail.status})"
+                    )
+                }
+            } catch (e: GroundsForgeClient.ApiException) {
+                throw GradleException(
+                    "grounds-push: stream closed and status poll failed " +
+                        "(pushId=$pushId, statusCode=${e.statusCode}, reason=${e.message})",
+                    e,
                 )
             }
-        } catch (e: GroundsForgeClient.ApiException) {
-            throw GradleException(
-                "grounds-push: stream closed and status poll failed " +
-                    "(pushId=$pushId, statusCode=${e.statusCode}, reason=${e.message})",
-                e,
-            )
+            try {
+                TimeUnit.NANOSECONDS.sleep(
+                    minOf(TimeUnit.SECONDS.toNanos(1), (deadlineNanos - System.nanoTime()).coerceAtLeast(0)),
+                )
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw GradleException("grounds-push: status poll interrupted (pushId=$pushId)", e)
+            }
         }
+        throw GradleException("grounds-push: push did not reach a terminal status (pushId=$pushId)")
     }
 
     private fun handleTerminalState(pushId: String, terminalState: TerminalState, last20: ArrayDeque<String>) {
         when (terminalState) {
             is TerminalState.Succeeded -> {
-                logger.lifecycle("[grounds-push] Build succeeded (pushId=$pushId, imageTag=${terminalState.imageTag ?: "unknown"})")
+                logger.lifecycle("[grounds-push] Deployment ready (pushId=$pushId, imageTag=${terminalState.imageTag ?: "unknown"})")
             }
             is TerminalState.Failed -> {
                 val tailMsg = if (last20.isNotEmpty()) "\n  last 20 lines:\n" + last20.joinToString("\n") { "    $it" } else ""
-                throw GradleException("grounds-push: build_failed (pushId=$pushId, reason=${terminalState.reason})$tailMsg")
+                throw GradleException("grounds-push: push_failed (pushId=$pushId, reason=${terminalState.reason})$tailMsg")
             }
         }
     }
