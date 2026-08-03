@@ -499,6 +499,9 @@ class GroundsPushPluginTest {
             server.enqueue(MockResponse().setResponseCode(200).setBody(
                 """{"id":"p1","status":"build_succeeded","target":"dev","baseImage":"paper","imageTag":"zot/test:abc","failureReason":null,"createdAt":"2026-04-24T10:00:00Z","updatedAt":"2026-04-24T10:00:01Z"}"""
             ))
+            server.enqueue(MockResponse().setResponseCode(200).setBody(
+                """{"id":"p1","status":"ready","target":"dev","baseImage":"paper","imageTag":"zot/test:abc","failureReason":null,"createdAt":"2026-04-24T10:00:00Z","updatedAt":"2026-04-24T10:00:02Z"}"""
+            ))
             File(tmp, "settings.gradle.kts").writeText("rootProject.name = \"test\"\n")
             File(tmp, "app.jar").writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04) + ByteArray(100))
             File(tmp, "grounds.yaml").writeText("""
@@ -531,6 +534,7 @@ class GroundsPushPluginTest {
             assertEquals("/v1/base-images", server.takeRequest(5, TimeUnit.SECONDS)?.path)
             assertEquals("/v1/pushes", server.takeRequest(5, TimeUnit.SECONDS)?.path)
             assertEquals("/v1/pushes/p1/logs", server.takeRequest(5, TimeUnit.SECONDS)?.path)
+            assertEquals("/v1/pushes/p1", server.takeRequest(5, TimeUnit.SECONDS)?.path)
             assertEquals("/v1/pushes/p1", server.takeRequest(5, TimeUnit.SECONDS)?.path)
         } finally {
             server.shutdown()
