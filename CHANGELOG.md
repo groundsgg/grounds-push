@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/groundsgg/grounds-push/compare/v0.13.0...v0.13.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* wait for deployment terminal status ([#51](https://github.com/groundsgg/grounds-push/issues/51)) ([b2955f8](https://github.com/groundsgg/grounds-push/commit/b2955f82bdd9a03e85041cf91c2f210eb48235c3))
+
 ## [0.13.0](https://github.com/groundsgg/grounds-push/compare/v0.12.2...v0.13.0) (2026-07-13)
 
 
