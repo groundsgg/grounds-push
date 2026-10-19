@@ -33,7 +33,7 @@ abstract class GroundsPushRetryTask : DefaultTask() {
         val resolvedApi = (apiUrl.orNull
             ?: System.getenv("GROUNDS_API_URL")
             ?: (creds as? Credentials.FromFile)?.apiUrl
-            ?: "https://platform.grnds.io").trimEnd('/')
+            ?: "https://api.grounds.gg").trimEnd('/')
         val resolvedProjectId = projectId.orNull
             ?: System.getenv("GROUNDS_PROJECT")
         val client = GroundsForgeClient(
