@@ -71,7 +71,7 @@ Optional Gradle configuration:
 
 ```kotlin
 groundsPush {
-    apiUrl.set("https://platform.grnds.io")
+    apiUrl.set("https://api.grounds.gg")
     manifestFile.set(layout.projectDirectory.file("grounds.yaml"))
     jarFile.set(layout.projectDirectory.file("build/libs/my-plugin.jar"))
     target.set("dev")
@@ -152,7 +152,7 @@ API URL precedence is:
 1. `groundsPush.apiUrl`
 2. `GROUNDS_API_URL`
 3. `apiUrl` in `credentials.json`
-4. `https://platform.grnds.io`
+4. `https://api.grounds.gg`
 
 ## Retry a push
 

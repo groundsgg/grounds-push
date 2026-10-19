@@ -218,7 +218,7 @@ abstract class GroundsPushTask : DefaultTask() {
         val resolvedApiUrl = apiUrl.orNull
             ?: System.getenv("GROUNDS_API_URL")
             ?: (creds as? Credentials.FromFile)?.apiUrl
-            ?: "https://platform.grnds.io"    // internal default
+            ?: "https://api.grounds.gg"    // internal default
         val resolvedProjectId = projectId.orNull
             ?: System.getenv("GROUNDS_PROJECT")
 

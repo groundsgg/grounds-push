@@ -32,5 +32,5 @@ tasks.named<Jar>("jar") {
 
 groundsPush {
     // For local testing only — real users set GROUNDS_API_URL or configure ~/.config/grounds/credentials.json.
-    apiUrl.set(providers.environmentVariable("GROUNDS_API_URL").orElse("https://platform.grnds.io"))
+    apiUrl.set(providers.environmentVariable("GROUNDS_API_URL").orElse("https://api.grounds.gg"))
 }
